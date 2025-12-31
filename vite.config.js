@@ -19,6 +19,7 @@ export default defineConfig({
       }
     }
   },
-  base: './',
+  // Use root base so build emits absolute paths suitable for Netlify hosting
+  base: '/',
   })
 
