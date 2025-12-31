@@ -3,6 +3,9 @@ import { TiTick } from "react-icons/ti";
 import { FaRegCopyright } from "react-icons/fa6";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import mtn from "./assets/mtn.jpg";
+import telecel from "./assets/telecel.png";
+import at from "./assets/AT.png";
 
 const Home = () => {
   const { user } = useAuth()
@@ -48,7 +51,7 @@ const Home = () => {
         <div className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-yellow-50">
           <figure>
             <img
-              src="/src/assets/mtn.jpg"
+              src={mtn}
               alt="mtn"
               className="w-25 h-24 mt-2"
             />
@@ -81,7 +84,7 @@ const Home = () => {
         <div className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-red-50">
           <figure>
             <img
-              src="/src/assets/telecel.png"
+              src={telecel}
               alt="telecel"
               className="w-25 h-24 mt-2"
             />
@@ -114,7 +117,7 @@ const Home = () => {
         <div className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-blue-50">
           <figure>
             <img
-              src="/src/assets/AT.png"
+              src={at}
               alt="mtn"
               className="w-25 h-24 mt-2"
             />
