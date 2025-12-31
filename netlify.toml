@@ -12,3 +12,8 @@
   targetPort = 3000
   autoLaunch = false
   framework = "vite"
+
+  [[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
