@@ -1,13 +1,9 @@
 import React from 'react'
 import { FaWhatsapp } from 'react-icons/fa'
 
-const WhatsAppButton = ({ phone = '+233556665774', message = '', channel }) => {
-  const defaultChannel = 'https://whatsapp.com/channel/0029Vb7ip69IyPtc0WaqdX0I'
+const WhatsAppButton = ({ message = '', channel = 'https://whatsapp.com/channel/0029Vb7ip69IyPtc0WaqdX0I' }) => {
   const url = channel
-    ? channel
-    : phone
-    ? `https://wa.me/${phone.replace(/\D/g, '')}${message ? `?text=${encodeURIComponent(message)}` : ''}`
-    : defaultChannel
+
 
   const wrapperStyle = {
     position: 'fixed',
