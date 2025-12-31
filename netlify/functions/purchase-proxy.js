@@ -32,14 +32,29 @@ exports.handler = async (event) => {
     const headers = { 'Content-Type': 'application/json' }
     if (secretApiKey) headers['X-API-Key'] = secretApiKey
 
+    // Diagnostic logging (avoid printing secrets)
+    console.log('purchase-proxy: forwarding request', {
+      method: event.httpMethod,
+      path: event.path,
+      purchaseUrl,
+      hasApiKey: !!secretApiKey,
+      bodySample: typeof body === 'object' ? JSON.stringify(body).slice(0, 1000) : String(body)
+    })
+
     // Forward the request to the upstream purchase API
     const resp = await axios.post(purchaseUrl, body, { headers, timeout: 15000 })
 
+    console.log('purchase-proxy: upstream response', { status: resp.status })
+
     return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(resp.data) }
   } catch (err) {
-    console.error('purchase-proxy error', err?.response?.data || err.message)
+    console.error('purchase-proxy error', {
+      message: err.message,
+      status: err.response?.status,
+      data: err.response?.data
+    })
     const status = err.response?.status || 500
     const data = err.response?.data || { message: err.message }
-    return { statusCode: status, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase proxy failed', error: data }) }
+    return { statusCode: status, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase proxy failed', error: data, note: 'Check function logs in Netlify for details' }) }
   }
 }
