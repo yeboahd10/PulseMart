@@ -135,18 +135,27 @@ const MTN = () => {
         }
       }
 
-      axios.post('/api/paystack/initialize', initPayload)
-        .then((res) => {
+      (async () => {
+        try {
+          const res = await axios.post('/.netlify/functions/paystack-initialize', initPayload)
           const data = res.data && (res.data.data || res.data)
           const url = data?.authorization_url || data?.authorizationUrl || data?.data?.authorization_url
           if (!url) throw new Error('No authorization URL returned from Paystack')
-          // redirect user to Paystack checkout
           window.location.href = url
-        })
-        .catch((err) => {
-          console.error('Paystack init error', err)
-          alert(`Payment initialization failed: ${err.response?.data?.message || err.message}`)
-        })
+        } catch (netlifyErr) {
+          console.warn('Netlify init failed, falling back to local server', netlifyErr)
+          try {
+            const res2 = await axios.post('http://localhost:5000/api/paystack/initialize', initPayload)
+            const data = res2.data && (res2.data.data || res2.data)
+            const url = data?.authorization_url || data?.authorizationUrl || data?.data?.authorization_url
+            if (!url) throw new Error('No authorization URL returned from Paystack (fallback)')
+            window.location.href = url
+          } catch (fallbackErr) {
+            console.error('Paystack init error', fallbackErr)
+            alert(`Payment initialization failed: ${fallbackErr.response?.data?.message || fallbackErr.message}`)
+          }
+        }
+      })()
 
       return
     }
@@ -194,7 +203,8 @@ const MTN = () => {
             await addDoc(collection(db, 'purchases'), {
               userId: user?.uid ?? null,
               purchaseId,
-              transactionReference,
+              transactionReference: transactionReference || purchaseId || resp?.data?.reference || resp?.data?.transactionReference || resp?.data?.id || '',
+              rawResponse: resp,
               network: b.network,
               phoneNumber: phone,
               capacity: b.dataAmount,

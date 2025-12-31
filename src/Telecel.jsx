@@ -106,9 +106,10 @@ const Telecel = () => {
             await addDoc(collection(db, 'purchases'), {
               userId: user?.uid ?? null,
               purchaseId,
-              transactionReference,
-                network: b.network,
-                phoneNumber: phone,
+              transactionReference: transactionReference || purchaseId || resp?.data?.reference || resp?.data?.transactionReference || resp?.data?.id || '',
+              rawResponse: resp,
+              network: b.network,
+              phoneNumber: phone,
               capacity: b.dataAmount,
               price: actualPrice,
               createdAt: serverTimestamp(),

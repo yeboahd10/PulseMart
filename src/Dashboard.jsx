@@ -76,7 +76,7 @@ const Dashboard = () => {
           phoneNumber: data.phoneNumber || data.phone || data.msisdn || '',
           dataAmount: data.capacity || data.size || data.bundle || '',
           price: ((Number(data.price ?? data.amount) || 0)).toFixed(2),
-          transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.transactionId || data.txId || data.id || '',
+          transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.reference || data.transactionId || data.txId || data.id || '',
           status: (data.status || data.order_status || data.tx_status || 'Unknown'),
           createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : null,
           raw: data
@@ -240,14 +240,39 @@ const Dashboard = () => {
                   if (isNaN(amt) || amt <= 0) { alert('Please enter a valid amount'); return }
 
                   const payload = { amount: amt, email: profileEmail, callback_url: `${window.location.origin}/paystack/callback` }
-                  const resp = await fetch('http://localhost:5000/api/paystack/initialize', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                  })
+                  let body = null
+                  // first try Netlify function endpoint
+                  try {
+                    const resp = await fetch('/.netlify/functions/paystack-initialize', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload)
+                    })
 
-                  const body = await resp.json()
-                  if (!resp.ok) throw new Error(body.message || JSON.stringify(body))
+                    if (!resp.ok) {
+                      let text = ''
+                      try { text = await resp.text(); const maybeJson = JSON.parse(text || '{}'); throw new Error(maybeJson.message || JSON.stringify(maybeJson) || resp.statusText) } catch (e) { throw new Error(text || resp.statusText || `HTTP ${resp.status}`) }
+                    }
+
+                    body = await resp.json()
+                  } catch (netlifyErr) {
+                    // fallback to local express server if Netlify functions aren't available
+                    try {
+                      const fallbackResp = await fetch('http://localhost:5000/api/paystack/initialize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                      })
+                      if (!fallbackResp.ok) {
+                        let text = ''
+                        try { text = await fallbackResp.text(); const maybeJson = JSON.parse(text || '{}'); throw new Error(maybeJson.message || JSON.stringify(maybeJson) || fallbackResp.statusText) } catch (e) { throw new Error(text || fallbackResp.statusText || `HTTP ${fallbackResp.status}`) }
+                      }
+                      body = await fallbackResp.json()
+                    } catch (fallbackErr) {
+                      // rethrow original error for outer catch to handle
+                      throw netlifyErr
+                    }
+                  }
 
                   const url = body?.data?.authorization_url
                   if (url) {

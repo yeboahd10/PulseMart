@@ -20,13 +20,31 @@ const PaystackCallback = () => {
 
     const verify = async () => {
       try {
-        const resp = await fetch('/api/paystack/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reference })
-        })
-        const body = await resp.json()
-        if (!resp.ok) throw new Error(body.message || JSON.stringify(body))
+        let body = null
+        try {
+          const resp = await fetch('/.netlify/functions/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reference })
+          })
+          if (!resp.ok) {
+            let text = ''
+            try { text = await resp.text(); const maybeJson = JSON.parse(text || '{}'); throw new Error(maybeJson.message || JSON.stringify(maybeJson) || resp.statusText) } catch (e) { throw new Error(text || resp.statusText || `HTTP ${resp.status}`) }
+          }
+          body = await resp.json()
+        } catch (netlifyErr) {
+          console.warn('Netlify verify failed, falling back to local server', netlifyErr)
+          const fallbackResp = await fetch('http://localhost:5000/api/paystack/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reference })
+          })
+          if (!fallbackResp.ok) {
+            let text = ''
+            try { text = await fallbackResp.text(); const maybeJson = JSON.parse(text || '{}'); throw new Error(maybeJson.message || JSON.stringify(maybeJson) || fallbackResp.statusText) } catch (e) { throw new Error(text || fallbackResp.statusText || `HTTP ${fallbackResp.status}`) }
+          }
+          body = await fallbackResp.json()
+        }
 
         const tx = body?.data
         if (tx && tx.status === 'success') {

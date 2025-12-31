@@ -1,0 +1,14 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[dev]
+  command = "npm run dev"
+  # Netlify Dev should not bind to the same port your app uses (Vite defaults to 5173).
+  # Use a different port for the Netlify Dev proxy to avoid conflicts.
+  port = 8888
+  # The port your framework server (Vite) listens on. Netlify Dev will proxy to this.
+  # Vite is configured to use port 3000 in vite.config.js, so targetPort should match.
+  targetPort = 3000
+  autoLaunch = false
+  framework = "vite"
