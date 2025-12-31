@@ -27,6 +27,7 @@ function App() {
         <Route path="/mtn" element={<MTN />} />
         <Route path="/telecel" element={<Telecel />} />
         <Route path="/airteltigo" element={<AT />} />
+        <Route path="/at" element={<AT />} />
         <Route path="/paystack/callback" element={<PaystackCallback />} />
       </Routes>
       <WhatsAppButton phone="+233556665774" message="Hello! I need help with ...." />

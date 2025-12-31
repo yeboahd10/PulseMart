@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import usePackages from './hooks/usePackages'
+import Spinner from './components/Spinner'
+import SkeletonGrid from './components/SkeletonGrid'
+import BundleCard from './components/BundleCard'
 import axios from "axios";
 import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef } from 'firebase/firestore'
 import { db } from './firebase'
 import { useAuth } from './context/AuthContext'
 import { TiTick } from "react-icons/ti";
 import { FaCediSign, FaPhone, FaRegCopyright } from "react-icons/fa6";
+import { mapNetwork } from './utils/network'
 import { Link } from "react-router-dom";
 
 const apiUrl = import.meta.env.VITE_API_BASE ;
@@ -18,74 +23,13 @@ const MTN = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [phone, setPhone] = useState("");
-  const [bundles, setBundles] = useState(localPrices.map((p, i) => ({ network: 'MTN', dataAmount: `${i + 1} GB`, price: p, apiPrice: null })));
+  const { bundles, setBundles, loading, error } = usePackages('MTN', localPrices)
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [successInfo, setSuccessInfo] = useState(null);
 
-  useEffect(() => {
-    if (!apiUrl) {
-      console.error("API URL is missing in .env");
-      return;
-    }
-    axios
-      .get('/.netlify/functions/packages?provider=MTN')
-      .then((response) => {
-        const raw = Array.isArray(response.data)
-          ? response.data
-          : response.data?.data || [];
-        console.log("MTN API raw:", raw);
+  // packages are loaded by usePackages hook; `loading` indicates whether API data is still loading
 
-        const mapped = raw.map((item, i) => {
-          const capacity =
-            item.dataAmount ||
-            item.amount ||
-            item.size ||
-            item.name ||
-            item.label ||
-            item.bundle ||
-            item.description ||
-            item.title ||
-            item.capacity ||
-            item.value ||
-            `${i + 1} GB`;
-          return {
-            network: "MTN",
-            dataAmount: capacity,
-            // UI display price (keeps local price for display)
-            price: localPrices[i] ?? item.price ?? null,
-            // actual price from API — used for purchases only
-            apiPrice: item.price ?? null,
-          };
-        });
-
-        if (mapped.length < localPrices.length) {
-          for (let j = mapped.length; j < localPrices.length; j++) {
-            mapped.push({
-              network: "MTN",
-              dataAmount: `${j + 1} GB`,
-              price: localPrices[j],
-              apiPrice: null,
-            });
-          }
-        }
-
-        setBundles(mapped);
-      })
-      .catch((error) => {
-        console.error("Error fetching MTN data packages:", error);
-
-        setBundles(
-          localPrices.map((p, i) => ({
-            network: "MTN",
-            dataAmount: `${i + 1} GB`,
-            price: p,
-            apiPrice: null,
-          }))
-        );
-      });
-  }, []);
-
-  const handleBuy = () => {
+  const handleBuy = async () => {
     const b = bundles[selectedIndex];
     if (!b) return;
     if (!phone) {
@@ -109,14 +53,6 @@ const MTN = () => {
       }
 
       const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
-      const mapNetwork = (net) => {
-        if (!net) return net
-        const n = String(net).toLowerCase()
-        if (n.includes('mtn') || n.includes('yello')) return 'YELLO'
-        if (n.includes('telecel')) return 'TELECEL'
-        if (n.includes('airteltigo') || n.includes('airtel') || n.includes('at')) return 'AT_PREMIUM'
-        return String(net).toUpperCase()
-      }
 
       // initialize Paystack payment for the shortfall and include purchase metadata
       const initPayload = {
@@ -133,27 +69,12 @@ const MTN = () => {
         }
       }
 
-      ;(async () => {
-        try {
-          const res = await axios.post('/.netlify/functions/paystack-initialize', initPayload)
-          const data = res.data && (res.data.data || res.data)
-          const url = data?.authorization_url || data?.authorizationUrl || data?.data?.authorization_url
-          if (!url) throw new Error('No authorization URL returned from Paystack')
-          window.location.href = url
-        } catch (netlifyErr) {
-          console.warn('Netlify init failed, falling back to local server', netlifyErr)
-          try {
-            const res2 = await axios.post('http://localhost:5000/api/paystack/initialize', initPayload)
-            const data = res2.data && (res2.data.data || res2.data)
-            const url = data?.authorization_url || data?.authorizationUrl || data?.data?.authorization_url
-            if (!url) throw new Error('No authorization URL returned from Paystack (fallback)')
-            window.location.href = url
-          } catch (fallbackErr) {
-            console.error('Paystack init error', fallbackErr)
-            alert(`Payment initialization failed: ${fallbackErr.response?.data?.message || fallbackErr.message}`)
-          }
-        }
-      })()
+      try {
+        const { initPaystack } = await import('./utils/paystack')
+        await initPaystack(initPayload)
+      } catch (err) {
+        alert(`Payment initialization failed: ${err.response?.data?.message || err.message}`)
+      }
 
       return
     }
@@ -163,15 +84,6 @@ const MTN = () => {
     if (!actualPrice) {
       alert('Cannot purchase: price not available from API for this bundle')
       return
-    }
-
-    const mapNetwork = (net) => {
-      if (!net) return net
-      const n = String(net).toLowerCase()
-      if (n.includes('mtn') || n.includes('yello')) return 'YELLO'
-      if (n.includes('telecel')) return 'TELECEL'
-      if (n.includes('airteltigo') || n.includes('airtel') || n.includes('at')) return 'AT_PREMIUM'
-      return String(net).toUpperCase()
     }
 
     const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
@@ -238,6 +150,17 @@ const MTN = () => {
       });
   };
 
+  if (loading) {
+    return (
+      <div className="py-8">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="flex items-center justify-center mb-6"><Spinner label="Loading bundles..." /></div>
+          <SkeletonGrid columns={3} count={6} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="flex justify-center flex-col text-center items-center">
@@ -248,36 +171,10 @@ const MTN = () => {
       </div>
       <div className="flex justify-center flex-col text-center items-center ">
         <div className="w-full max-w-4xl px-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
             {bundles.map((b, idx) => (
-              <div
-                key={idx}
-                onClick={() => {
-                  setSelectedIndex(idx);
-                  setModalOpen(true);
-                }}
-                className="card bg-base-100 shadow-sm hover:shadow-lg transition-shadow duration-200 overflow-hidden relative h-36 cursor-pointer"
-              >
-                <div className="absolute top-0 left-0 w-full h-36 bg-amber-300" />
-
-                <div className="absolute top-0 left-0 w-full h-32 flex items-center justify-center z-10">
-                  <div className="flex items-center justify-between gap-4 px-6 w-full">
-                    <div className="text-left">
-                      <div className="text-3xl font-semibold">
-                        <h2 className="card-title text-3xl font-bold">
-                          {b.dataAmount} GB
-                        </h2>
-                      </div>
-                    </div>
-
-                    <div className="w-px bg-black h-12" />
-
-                    <div className="text-right text-3xl font-semibold mr-8">
-                      <FaCediSign className="inline mr-1" />
-                      {b.price}
-                    </div>
-                  </div>
-                </div>
+              <div key={idx} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }}>
+                <BundleCard b={b} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }} />
               </div>
             ))}
           </div>
@@ -285,95 +182,68 @@ const MTN = () => {
       </div>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-lg w-11/12 max-w-md p-6">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-semibold">Confirm Purchase</h3>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="text-gray-500 hover:text-gray-800"
-              >
-                ✕
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl shadow-2xl w-11/12 max-w-md">
+            <div className="px-5 py-4 border-b border-white/30 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Confirm Purchase</h3>
+              <button onClick={() => setModalOpen(false)} className="text-gray-700 hover:text-gray-900">✕</button>
             </div>
 
-            <div className="mb-4">
-              <div className="text-sm text-gray-600">Network</div>
-              <div className="text-xl font-bold">
-                {bundles[selectedIndex].network}
+            <div className="p-5 space-y-4">
+              <div className="flex flex-col">
+                <span className="text-xs text-gray-500">Network</span>
+                <span className="text-sm font-medium text-gray-900">{bundles[selectedIndex].network}</span>
               </div>
-            </div>
 
-            <div className="mb-4">
-              <div className="text-sm text-gray-600">Data Amount</div>
-              <div className="text-xl font-bold">
-                {bundles[selectedIndex].dataAmount}
+              <div className="flex flex-col">
+                <span className="text-xs text-gray-500">Data Amount</span>
+                <span className="text-sm font-medium text-gray-900">{bundles[selectedIndex].dataAmount}</span>
               </div>
-            </div>
 
-            <div className="mb-4">
-              <div className="text-sm text-gray-600">Price</div>
-              <div className="text-xl font-semibold">
-                <FaCediSign className="inline mr-1" />
-                {bundles[selectedIndex].price}
+              <div className="flex flex-col">
+                <span className="text-xs text-gray-500">Price</span>
+                <div className="flex items-center gap-1 text-lg font-bold text-gray-900">
+                  <FaCediSign />{bundles[selectedIndex].price}
+                </div>
               </div>
-            </div>
 
-            <div className="mb-4">
-              <label className="label">Phone Number</label>
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-500 mb-1">Phone Number</label>
                 <input
                   type="text"
                   placeholder="Enter phone number"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="input w-full"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white/80 focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
-            </div>
+              </div>
 
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setModalOpen(false)}
-                className="btn btn-ghost"
-              >
-                Cancel
-              </button>
-              <button onClick={handleBuy} className="btn btn-primary">
-                Place Order
-              </button>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={handleBuy} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Place Order</button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
         {successModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                <div className="bg-white rounded-lg shadow-lg w-11/12 max-w-md p-6">
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => setSuccessModalOpen(false)}
-                      className="text-gray-500 hover:text-gray-800"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="py-6 flex flex-col items-center justify-center text-center gap-3">
-                    <div className="rounded-full bg-green-100 p-4">
-                      <TiTick className="text-green-600" size={48} />
-                    </div>
-                    <div className="text-lg font-medium">Order placed successfully</div>
-                    {successInfo?.purchaseId && (
-                      <div className="text-sm text-gray-600 mt-1">Order ID: {successInfo.purchaseId}</div>
-                    )}
-                  </div>
-                  <div className="flex justify-center">
-                    <button
-                      onClick={() => setSuccessModalOpen(false)}
-                      className="btn btn-primary"
-                    >
-                      OK
-                    </button>
-                  </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl shadow-2xl w-11/12 max-w-sm p-6 text-center">
+              <button onClick={() => setSuccessModalOpen(false)} className="absolute right-4 top-4 text-gray-700">✕</button>
+              <div className="flex flex-col items-center gap-4">
+                <div className="rounded-full bg-green-100 p-4">
+                  <TiTick className="text-green-600" size={40} />
                 </div>
+                <div className="text-lg font-semibold text-gray-900">Order placed successfully</div>
+                {successInfo?.purchaseId && (
+                  <div className="text-sm text-gray-600">Order ID: {successInfo.purchaseId}</div>
+                )}
+                <div className="w-full">
+                  <button onClick={() => setSuccessModalOpen(false)} className="w-full mt-3 px-4 py-2 rounded-lg bg-blue-600 text-white">OK</button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       <div className="flex mb-4 mt-8 text-center justify-center items-center gap-2 text-gray-500">
