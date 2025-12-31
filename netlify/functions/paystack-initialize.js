@@ -6,6 +6,7 @@ const JSON_HEADERS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'appl
 
 exports.handler = async (event) => {
   try {
+    console.log('paystack-initialize invoked', { method: event.httpMethod, path: event.path })
     const body = event.body ? JSON.parse(event.body) : {};
     const { amount, email, callback_url, currency, channels, reference, metadata } = body || {};
     if (!amount || !email) return { statusCode: 400, headers: JSON_HEADERS, body: JSON.stringify({ message: 'Missing amount or email' }) };

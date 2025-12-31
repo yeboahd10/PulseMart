@@ -36,7 +36,7 @@ const PaymentModal = ({ open, onClose, onSubmit, defaultEmail = '' }) => {
             onClick={() => onSubmit(amount)}
             disabled={!amount || Number(amount) <= 0}
           >
-            Pay
+            Top Up
           </button>
         </div>
       </div>

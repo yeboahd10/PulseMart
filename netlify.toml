@@ -12,14 +12,15 @@
   targetPort = 3000
   autoLaunch = false
   framework = "vite"
-  # Ensure Netlify Functions paths are preserved (do this BEFORE the SPA fallback)
-  [[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
 
-  # SPA fallback (last)
-  [[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# Ensure Netlify Functions paths are preserved (do this BEFORE the SPA fallback)
+[[redirects]]
+from = "/.netlify/functions/*"
+to = "/.netlify/functions/:splat"
+status = 200
+
+# SPA fallback (last)
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200

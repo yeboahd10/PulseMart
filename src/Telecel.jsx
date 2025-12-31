@@ -26,23 +26,14 @@ const Telecel = () => {
   useEffect(() => {
     if (!apiUrlTelecel) return
 
-    axios.get(apiUrlTelecel, { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined })
+    axios.get('/.netlify/functions/packages?provider=TELECEL')
       .then(res => {
         const raw = Array.isArray(res.data) ? res.data : res.data?.data || []
         console.log("Telecel API raw:", raw);
         const mapped = raw.map((item, i) => {
-          const capacity =
-            item.dataAmount ||
-            item.amount ||
-            item.size ||
-            item.name ||
-            item.label ||
-            item.bundle ||
-            item.description ||
-            item.title ||
-            item.capacity ||
-            item.value ||
-            `${i + 1} GB`;
+          let capacityRaw = item.dataAmount || item.amount || item.size || item.name || item.label || item.bundle || item.description || item.title || item.capacity || item.value || `${i + 1}`
+          let capacity = String(capacityRaw || '').trim()
+          if (!/gb$/i.test(capacity) && /^\d+(?:\.\d+)?$/.test(capacity)) capacity = `${capacity} GB`
           return {
             network: 'Telecel',
             dataAmount: capacity,
@@ -72,6 +63,59 @@ const Telecel = () => {
       alert('Please enter a phone number')
       return
     }
+    if (!purchaseUrl) {
+      alert('Purchase URL not configured')
+      return
+    }
+
+    const displayPrice = Number(b.price) || 0
+    const userBalance = Number(user?.balance ?? user?.wallet ?? 0)
+    if (user && userBalance < displayPrice) {
+      const shortfall = Number((displayPrice - userBalance).toFixed(2))
+      if (!user.email) {
+        alert('Please ensure your account has an email before paying')
+        return
+      }
+
+      const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
+      const initPayload = {
+        amount: shortfall,
+        email: user.email,
+        callback_url: `${window.location.origin}/paystack/callback`,
+        metadata: {
+          purchase: {
+            phoneNumber: phone,
+            network: mapNetwork(b.network || 'Telecel'),
+            capacity: capacity,
+            displayPrice: displayPrice
+          }
+        }
+      }
+
+      ;(async () => {
+        try {
+          const res = await axios.post('/.netlify/functions/paystack-initialize', initPayload)
+          const data = res.data && (res.data.data || res.data)
+          const url = data?.authorization_url || data?.authorizationUrl || data?.data?.authorization_url
+          if (!url) throw new Error('No authorization URL returned from Paystack')
+          window.location.href = url
+        } catch (netlifyErr) {
+          console.warn('Netlify init failed, falling back to local server', netlifyErr)
+          try {
+            const res2 = await axios.post('http://localhost:5000/api/paystack/initialize', initPayload)
+            const data = res2.data && (res2.data.data || res2.data)
+            const url = data?.authorization_url || data?.authorizationUrl || data?.data?.authorization_url
+            if (!url) throw new Error('No authorization URL returned from Paystack (fallback)')
+            window.location.href = url
+          } catch (fallbackErr) {
+            console.error('Paystack init error', fallbackErr)
+            alert(`Payment initialization failed: ${fallbackErr.response?.data?.message || fallbackErr.message}`)
+          }
+        }
+      })()
+
+      return
+    }
     const actualPrice = b.apiPrice ?? null
     if (!actualPrice) {
       alert('Cannot purchase: price not available from API for this bundle')
@@ -91,7 +135,7 @@ const Telecel = () => {
     const payload = { phoneNumber: phone, network: mapNetwork(b.network || 'Telecel'), capacity, gateway: 'wallet' }
     const headers = { 'Content-Type': 'application/json' }
     if (apiKey) headers['X-API-Key'] = apiKey
-    axios.post('/api/purchase', payload, { headers })
+    axios.post(purchaseUrl, payload, { headers })
       .then(async (res) => {
         console.log('Telecel purchase resp:', res.data)
         const resp = res.data || {}

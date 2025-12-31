@@ -6,6 +6,7 @@ const JSON_HEADERS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'appl
 
 exports.handler = async (event) => {
   try {
+    console.log('verify.handler invoked', { method: event.httpMethod, path: event.path, qs: event.queryStringParameters })
     // Support both POST (body) and GET (query string) so Paystack redirects work directly to the function
     let reference = null
     if (event.httpMethod === 'GET') {

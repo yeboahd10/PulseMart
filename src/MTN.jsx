@@ -28,9 +28,7 @@ const MTN = () => {
       return;
     }
     axios
-      .get(apiUrl, {
-        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
-      })
+      .get('/.netlify/functions/packages?provider=MTN')
       .then((response) => {
         const raw = Array.isArray(response.data)
           ? response.data
@@ -135,7 +133,7 @@ const MTN = () => {
         }
       }
 
-      (async () => {
+      ;(async () => {
         try {
           const res = await axios.post('/.netlify/functions/paystack-initialize', initPayload)
           const data = res.data && (res.data.data || res.data)
@@ -188,7 +186,7 @@ const MTN = () => {
     const headers = { 'Content-Type': 'application/json' }
     if (apiKey) headers['X-API-Key'] = apiKey
 
-    axios.post('/api/purchase', payload, { headers })
+    axios.post(purchaseUrl, payload, { headers })
       .then(async (res) => {
         console.log('Purchase response:', res.data);
         const resp = res.data || {}
