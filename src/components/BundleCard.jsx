@@ -27,7 +27,7 @@ export default function BundleCard({ b, onClick }) {
       <div className={`p-3 sm:p-4 flex items-center justify-between ${isDeep ? 'text-white' : ''}`}>
         <div>
           <h3 className={`text-base sm:text-lg font-bold ${isDeep ? 'text-white' : 'text-gray-800'}`}>{b.dataAmount}</h3>
-          <p className={`${isDeep ? 'text-blue-100' : 'text-gray-500'} text-xs sm:text-sm mt-1`}>Great value package</p>
+          <p className={`${isDeep ? 'text-blue-100' : 'text-gray-500'} text-xs sm:text-sm mt-1`}>In Stock</p>
         </div>
 
         <div className="text-right">

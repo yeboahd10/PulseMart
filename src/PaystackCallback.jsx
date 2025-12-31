@@ -51,6 +51,29 @@ const PaystackCallback = () => {
         if (tx && tx.status === 'success') {
           const amountGhs = Number(tx.amount) / 100
 
+          // Determine how much to credit the user's account.
+          // If the Paystack transaction included metadata with the original amount or purchase shortfall,
+          // credit only that original amount (so the 2% payment fee does not remain in the user's balance).
+          let creditAmount = amountGhs
+          try {
+            const meta = tx.metadata || {}
+            // Common places we might find the original amount or shortfall depending on caller
+            // - metadata.originalAmount (used by Dashboard top-up)
+            // - metadata.purchase.shortfall (used by purchase flows)
+            if (meta.originalAmount && !isNaN(Number(meta.originalAmount))) {
+              creditAmount = Number(meta.originalAmount)
+            } else if (meta.purchase && meta.purchase.shortfall && !isNaN(Number(meta.purchase.shortfall))) {
+              creditAmount = Number(meta.purchase.shortfall)
+            } else if (meta.purchase && meta.purchase.displayPrice && meta.purchase.fee && !isNaN(Number(meta.purchase.displayPrice))) {
+              // If only displayPrice and fee present, assume we should credit displayPrice
+              creditAmount = Number(meta.purchase.displayPrice)
+            }
+          } catch (e) {
+            console.warn('Failed to parse transaction metadata for credit amount, defaulting to full amount', e)
+          }
+          // Ensure creditAmount is not greater than amountGhs
+          creditAmount = Math.min(Number(creditAmount) || 0, amountGhs)
+
           // attempt to resolve user: prefer context `user`/auth uid, else locate by email in Firestore
           const auth = getAuth()
           const fbUser = user ?? auth.currentUser
@@ -91,9 +114,9 @@ const PaystackCallback = () => {
 
               const snap2 = await t.get(userRef)
               const current = Number(snap2.exists() ? (snap2.data().balance ?? snap2.data().wallet ?? 0) : 0)
-              const newBalance = Number((current + amountGhs).toFixed(2))
+              const newBalance = Number((current + creditAmount).toFixed(2))
               t.update(userRef, { balance: newBalance })
-              t.set(markerRef, { reference: tx.reference || reference, userId: userRef.id, amount: amountGhs, processedAt: serverTimestamp() })
+              t.set(markerRef, { reference: tx.reference || reference, userId: userRef.id, amount: creditAmount, rawAmount: amountGhs, metadata: tx.metadata || null, processedAt: serverTimestamp() })
             })
 
             // refresh auth context after credit
