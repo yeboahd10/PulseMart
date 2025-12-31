@@ -6,8 +6,14 @@ const JSON_HEADERS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'appl
 
 exports.handler = async (event) => {
   try {
-    const body = event.body ? JSON.parse(event.body) : {};
-    const { reference } = body || {};
+    // Support both POST (body) and GET (query string) so Paystack redirects work directly to the function
+    let reference = null
+    if (event.httpMethod === 'GET') {
+      reference = (event.queryStringParameters && event.queryStringParameters.reference) || (event.queryStringParameters && event.queryStringParameters.trxref) || (event.queryStringParameters && event.queryStringParameters.trxref) || null
+    } else {
+      const body = event.body ? JSON.parse(event.body) : {}
+      reference = body?.reference || null
+    }
     if (!reference) return { statusCode: 400, headers: JSON_HEADERS, body: JSON.stringify({ message: 'Missing reference' }) };
 
     const secret = _sanitize(process.env.PAYSTACK_SECRET_KEY);
@@ -21,6 +27,12 @@ exports.handler = async (event) => {
       },
       timeout: 10000
     });
+
+    // If the request came from a browser redirect (GET), redirect to the SPA callback route with original query
+    if (event.httpMethod === 'GET') {
+      // Redirect client back to SPA route (keep reference in query)
+      return { statusCode: 302, headers: { Location: `/paystack/callback?reference=${encodeURIComponent(reference)}` } }
+    }
 
     return { statusCode: 200, headers: JSON_HEADERS, body: JSON.stringify(response.data) };
   } catch (err) {
