@@ -236,7 +236,7 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="flex justify-center items-center">
-              <Link to="/"><button className="btn btn-primary m-3 w-full hover:bg-white hover:text-blue-500">Buy Data</button></Link>
+              <Link to="/"><button className="btn btn-primary m-3 w-full hover:bg-white hover:text-blue-500">Buy Bundle Now</button></Link>
             </div>
             <PaymentModal
               open={showPayModal}

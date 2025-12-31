@@ -27,7 +27,7 @@ const Navbar = () => {
     <>
       <div className='sticky top-0 z-50 navbar shadow-sm flex-1 justify-between backdrop-blur-sm bg-white/70 border-b border-gray-200'>
         <div>
-          <Link to="/" className='btn btn-ghost text-2xl sm:text-3xl font-calsans font-bold text-blue-500 ml-2 sm:ml-1'>PulseMart</Link>
+          <Link to="/" className='btn btn-ghost text-2xl sm:text-4xl font-calsans font-bold text-blue-500 ml-1 sm:ml-1'>PulseMart</Link>
         </div>
 
         
@@ -105,18 +105,15 @@ const Navbar = () => {
                   </button>
 
                   {buyOpen && (
-                    <div className='flex flex-col items-center mt-1 ml-14 mr-4'>
-                      <Link to="/mtn" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-50'>
+                    <div className='flex flex-col items-center mt-1 ml-14 mr-4 w-full divide-y divide-gray-200'>
+                      <Link to="/mtn" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50'>
                         <span className='text-amber-600'>MTN</span>
-                       
                       </Link>
-                      <Link to="/telecel" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-50'>
+                      <Link to="/telecel" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50'>
                         <span className='text-red-600'>Telecel</span>
-                       
                       </Link>
-                      <Link to="/at" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-50'>
+                      <Link to="/at" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50'>
                         <span className='text-sky-600 text-center'>AT</span>
-                        
                       </Link>
                     </div>
                   )}
