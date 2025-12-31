@@ -16,7 +16,9 @@ import { Link } from "react-router-dom";
 // module-scope env and prices for Telecel
 const apiUrlTelecel = import.meta.env.VITE_API_BASE_TELECEL
 const apiKey = import.meta.env.VITE_API_KEY
-const purchaseUrl = import.meta.env.VITE_API_PURCHASE || 'https://api.datamartgh.shop/api/developer/purchase'
+const purchaseUrl = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
+  ? '/.netlify/functions/purchase-proxy'
+  : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy')
 const localPricesTelecel = [25, 40, 48, 55, 68,85,100,120,137,157,174,195,360]
 
 const Telecel = () => {
@@ -46,6 +48,8 @@ const Telecel = () => {
     const userBalance = Number(user?.balance ?? user?.wallet ?? 0)
     if (user && userBalance < displayPrice) {
       const shortfall = Number((displayPrice - userBalance).toFixed(2))
+      const fee = Number((shortfall * 0.02).toFixed(2))
+      const total = Number((shortfall + fee).toFixed(2))
       if (!user.email) {
         alert('Please ensure your account has an email before paying')
         return
@@ -53,7 +57,7 @@ const Telecel = () => {
 
       const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
       const initPayload = {
-        amount: shortfall,
+        amount: total,
         email: user.email,
         callback_url: `${window.location.origin}/paystack/callback`,
         metadata: {
@@ -61,7 +65,9 @@ const Telecel = () => {
             phoneNumber: phone,
             network: mapNetwork(b.network || 'Telecel'),
             capacity: capacity,
-            displayPrice: displayPrice
+            displayPrice: displayPrice,
+            shortfall,
+            fee
           }
         }
       }

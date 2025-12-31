@@ -3,7 +3,7 @@ import { useAuth } from "./context/AuthContext";
 import { FaWallet, FaChevronLeft, FaChevronRight, FaList } from "react-icons/fa";
 import { CgProfile } from "react-icons/cg";
 import { FaCartPlus } from "react-icons/fa";
-import { FaCediSign } from "react-icons/fa6";
+import { FaCediSign, FaLock } from "react-icons/fa6";
 import { Link } from "react-router-dom";
 import { doc, setDoc, onSnapshot, collection, query, where, orderBy } from 'firebase/firestore'
 import { db, auth } from './firebase'
@@ -71,12 +71,15 @@ const Dashboard = () => {
 
       const mapSnap = (snap) => snap.docs.map(d => {
         const data = d.data() || {}
+        // Prefer display/local price fields when available; fall back to API price/amount
+        const rawPrice = data.displayPrice ?? data.display_price ?? data.uiPrice ?? data.localPrice ?? data.price ?? data.amount ?? 0
+        const displayPrice = Number(rawPrice || 0)
         return {
           id: d.id,
           networkNumber: `${data.network || ''} • ${data.phoneNumber || data.phone || ''}`.trim(),
           phoneNumber: data.phoneNumber || data.phone || data.msisdn || '',
           dataAmount: data.capacity || data.size || data.bundle || '',
-          price: ((Number(data.price ?? data.amount) || 0)).toFixed(2),
+          price: displayPrice.toFixed(2),
           transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.reference || data.transactionId || data.txId || data.id || '',
           status: (data.status || data.order_status || data.tx_status || 'Unknown'),
           createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : null,
@@ -231,7 +234,7 @@ const Dashboard = () => {
                   </button>
                 </div>
                  <div className="text-center  rounded-xl mt-2 justify-center items-center">
-                  <p className="text-sm mt-3">Payment is secured by Paystack</p>
+                  <p className="text-sm mt-3"><FaLock className="inline-block mr-2" />Payment is secured by Paystack</p>
                  </div>
               </div>
             </div>
@@ -247,7 +250,9 @@ const Dashboard = () => {
                   const amt = parseFloat(amount)
                   if (isNaN(amt) || amt <= 0) { alert('Please enter a valid amount'); return }
 
-                  const payload = { amount: amt, email: profileEmail, callback_url: `${window.location.origin}/paystack/callback` }
+                  const fee = Number((amt * 0.02).toFixed(2))
+                  const total = Number((amt + fee).toFixed(2))
+                  const payload = { amount: total, email: profileEmail, callback_url: `${window.location.origin}/paystack/callback`, metadata: { originalAmount: amt, fee } }
                   let body = null
                   // first try Netlify function endpoint
                   try {

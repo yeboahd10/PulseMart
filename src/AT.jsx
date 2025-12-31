@@ -16,7 +16,9 @@ import { mapNetwork } from './utils/network'
 // module-scope env and prices
 const apiUrlAT = import.meta.env.VITE_API_BASE_AT_PREMIUM
 const apiKey = import.meta.env.VITE_API_KEY
-const purchaseUrl = import.meta.env.VITE_API_PURCHASE || 'https://api.datamartgh.shop/api/developer/purchase'
+const purchaseUrl = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
+  ? '/.netlify/functions/purchase-proxy'
+  : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy')
 const localPricesAT = [4.15, 8.55, 13.45, 16.70, 19.70,23.70,30.70,38.70,45.70,57.70,95.20,115.20,151.20,190.20]
 
 const AT = () => {
@@ -57,6 +59,8 @@ const AT = () => {
     // if user's balance is less than UI display price, initialize Paystack for the shortfall
     if (user && userBalance < displayPrice) {
       const shortfall = Number((displayPrice - userBalance).toFixed(2))
+      const fee = Number((shortfall * 0.02).toFixed(2))
+      const total = Number((shortfall + fee).toFixed(2))
       if (!user.email) {
         alert('Please ensure your account has an email before paying')
         return
@@ -64,7 +68,7 @@ const AT = () => {
 
       const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
       const initPayload = {
-        amount: shortfall,
+        amount: total,
         email: user.email,
         callback_url: `${window.location.origin}/paystack/callback`,
         metadata: {
@@ -72,7 +76,9 @@ const AT = () => {
             phoneNumber: phone,
             network: mapNetwork(b.network),
             capacity: capacity,
-            displayPrice: displayPrice
+            displayPrice: displayPrice,
+            shortfall,
+            fee
           }
         }
       }

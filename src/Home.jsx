@@ -75,7 +75,7 @@ const Home = () => {
           </div>
           <div>
             <div className="card-actions justify-center mb-4">
-              <button onClick={() => handleBuy('/mtn')} className="btn btn-primary">Buy Now</button>
+              <button onClick={() => handleBuy('/mtn')} className="btn btn-primary w-39">Buy Now</button>
             </div>
           </div>
         </div>
@@ -108,7 +108,7 @@ const Home = () => {
           </div>
           <div>
             <div className="card-actions justify-center mb-4">
-              <button onClick={() => handleBuy('/telecel')} className="btn btn-primary">Buy Now</button>
+              <button onClick={() => handleBuy('/telecel')} className="btn btn-primary w-39">Buy Now</button>
             </div>
           </div>
         </div>
@@ -141,7 +141,7 @@ const Home = () => {
           </div>
           <div>
             <div className="card-actions justify-center mb-4">
-              <button onClick={() => handleBuy('/airteltigo')} className="btn btn-primary">Buy Now</button>
+              <button onClick={() => handleBuy('/airteltigo')} className="btn btn-primary w-39">Buy Now</button>
             </div>
           </div>
         </div>
