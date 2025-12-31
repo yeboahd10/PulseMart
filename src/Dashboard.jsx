@@ -6,7 +6,8 @@ import { FaCartPlus } from "react-icons/fa";
 import { FaCediSign } from "react-icons/fa6";
 import { Link } from "react-router-dom";
 import { doc, setDoc, onSnapshot, collection, query, where, orderBy } from 'firebase/firestore'
-import { db } from './firebase'
+import { db, auth } from './firebase'
+import { updateProfile } from 'firebase/auth'
 import PaymentModal from './components/PaymentModal'
 
 const Dashboard = () => {
@@ -131,6 +132,13 @@ const Dashboard = () => {
     setCurrentPage(1)
     setShowAllOrders(false)
   }, [orders.length])
+
+  const hasChanges = () => {
+    if (!user) return false
+    const originalName = user.fullName ?? user.displayName ?? ''
+    const originalPhone = user.phone ?? ''
+    return (String(profileFullName || '') !== String(originalName || '')) || (String(profilePhone || '') !== String(originalPhone || ''))
+  }
 
   // helper to truncate long transaction ids
   const truncate = (tx = '') => {
@@ -461,12 +469,34 @@ const Dashboard = () => {
               <div>
                 <button
                   className="btn btn-primary mt-5 w-80"
-                  disabled={savingProfile}
+                  disabled={savingProfile || !hasChanges()}
                   onClick={async () => {
                     if (!user?.uid) { setProfileMsg('Not signed in'); return }
+                    if (!hasChanges()) { setProfileMsg('No changes to save'); setTimeout(() => setProfileMsg(''), 2000); return }
                     setSavingProfile(true)
                     try {
-                      await setDoc(doc(db, 'users', user.uid), { fullName: profileFullName, phone: profilePhone }, { merge: true })
+                      const updates = {}
+                      const originalName = user.fullName ?? user.displayName ?? ''
+                      const originalPhone = user.phone ?? ''
+                      if (String(profileFullName || '') !== String(originalName || '')) updates.fullName = profileFullName
+                      if (String(profilePhone || '') !== String(originalPhone || '')) updates.phone = profilePhone
+
+                      if (Object.keys(updates).length === 0) {
+                        setProfileMsg('No changes to save')
+                        return
+                      }
+
+                      await setDoc(doc(db, 'users', user.uid), updates, { merge: true })
+
+                      // try updating Firebase Auth displayName when name changed
+                      if (updates.fullName && auth?.currentUser) {
+                        try {
+                          await updateProfile(auth.currentUser, { displayName: updates.fullName })
+                        } catch (e) {
+                          console.warn('Failed to update auth displayName', e)
+                        }
+                      }
+
                       setProfileMsg('Profile saved')
                     } catch (err) {
                       console.error('Failed to save profile', err)

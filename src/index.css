@@ -1,1 +1,24 @@
 @import "tailwindcss";
+
+:root {
+	--font-sans: 'Inter', 'Poppins', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+	--font-heading: 'Poppins', var(--font-sans);
+	--font-geom: 'Geom', var(--font-sans);
+}
+
+html, body, #root {
+	height: 100%;
+}
+
+body {
+	font-family: var(--font-sans);
+}
+
+h1,h2,h3,h4,h5,h6, .heading {
+	font-family: var(--font-heading);
+}
+
+/* Use Geom for paragraph text */
+p, .prose p {
+	font-family: var(--font-geom);
+}

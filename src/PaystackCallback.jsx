@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import { doc, getDoc, collection, query, where, getDocs, serverTimestamp, runTransaction } from 'firebase/firestore'
 import { db } from './firebase'
+import Spinner from './components/Spinner'
 import { getAuth } from 'firebase/auth'
 
 const PaystackCallback = () => {
@@ -132,7 +133,10 @@ const PaystackCallback = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white">
-      <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin" aria-hidden="true" />
+      <div className="w-full max-w-md px-4 text-center">
+        <div className="mb-4 text-gray-600">Processing payment — verifying transaction, please wait...</div>
+        <div className="flex items-center justify-center"><Spinner label="Verifying payment..." /></div>
+      </div>
     </div>
   )
 }

@@ -5,7 +5,19 @@ module.exports = {
     './src/**/*.{js,jsx,ts,tsx,html}'
   ],
   theme: {
-    extend: {}
+    extend: {
+      fontFamily: {
+        sans: [
+          'Inter',
+          'Poppins',
+          'ui-sans-serif',
+          'system-ui',
+        ],
+        heading: ['Poppins', 'Inter'],
+        calsans: ['"Cal Sans"', 'Poppins', 'Inter', 'ui-sans-serif'],
+        geom: ['"Geom"', 'Poppins', 'Inter', 'ui-sans-serif']
+      }
+    }
   },
   plugins: [require('daisyui')],
   daisyui: {

@@ -27,7 +27,7 @@ const Navbar = () => {
     <>
       <div className='sticky top-0 z-50 navbar shadow-sm flex-1 justify-between backdrop-blur-sm bg-white/70 border-b border-gray-200'>
         <div>
-          <a className='btn btn-ghost  text-2xl font-bold text-blue-500 ml-2 sm:ml-1'>PulseMart</a>
+          <Link to="/" className='btn btn-ghost text-2xl sm:text-3xl font-calsans font-bold text-blue-500 ml-2 sm:ml-1'>PulseMart</Link>
         </div>
 
         
@@ -35,6 +35,10 @@ const Navbar = () => {
           <Link to="/" className='btn btn-ghost  text-md '>Home</Link>
           {user ? (
             <>
+              <div className='ml-2 px-3 py-1 bg-gray-100 text-sm rounded-md border shadow-sm text-gray-700 flex items-center gap-2'>
+                <FaCediSign className='inline-block' />
+                <span>{formattedBalance}</span>
+              </div>
               <Link to="/dashboard" className='btn btn-ghost text-md'>Dashboard</Link>
               <button onClick={handleLogout} className='btn btn-ghost text-md'>Logout</button>
             </>
