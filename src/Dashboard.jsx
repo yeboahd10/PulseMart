@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from 'react-router-dom'
+import { TiTick } from 'react-icons/ti'
 import { useAuth } from "./context/AuthContext";
 import { FaWallet, FaChevronLeft, FaChevronRight, FaList } from "react-icons/fa";
 import { CgProfile } from "react-icons/cg";
@@ -27,6 +29,9 @@ const Dashboard = () => {
   const [copiedId, setCopiedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showAllOrders, setShowAllOrders] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [successModalOpen, setSuccessModalOpen] = useState(false)
+  const [successInfo, setSuccessInfo] = useState(null)
 
   useEffect(() => {
     if (!user) return
@@ -52,6 +57,22 @@ const Dashboard = () => {
 
     return () => { if (typeof unsub === 'function') unsub() }
   }, [user])
+
+  // show success modal when redirected from auto-purchase flow
+  useEffect(() => {
+    try {
+      const saved = searchParams.get('purchaseSaved')
+      const pid = searchParams.get('purchaseId')
+      if (saved && pid) {
+        setSuccessInfo({ purchaseId: pid })
+        setSuccessModalOpen(true)
+        // clear params so modal doesn't reappear on refresh
+        setSearchParams({}, { replace: true })
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [searchParams, setSearchParams])
 
   const items = [
     { id: "wallet", icon: <FaWallet size="1.5em" />, label: "Wallet" },
@@ -236,6 +257,23 @@ const Dashboard = () => {
                  <div className="text-center  rounded-xl mt-2 justify-center items-center">
                   <p className="text-sm mt-3"><FaLock className="inline-block mr-2" />Payment is secured by Paystack</p>
                  </div>
+                {successModalOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl shadow-2xl w-11/12 max-w-sm p-6 text-center">
+                      <button onClick={() => setSuccessModalOpen(false)} className="absolute right-4 top-4 text-gray-700">✕</button>
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="rounded-full bg-green-100 p-4">
+                          <TiTick className="text-green-600" size={40} />
+                        </div>
+                        <div className="text-lg font-semibold text-gray-900">Order placed successfully</div>
+                        {/* no order id shown here — intentionally omitted to match MTN modal */}
+                        <div className="w-full">
+                          <button onClick={() => setSuccessModalOpen(false)} className="w-full mt-3 px-4 py-2 rounded-lg bg-blue-600 text-white">OK</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex justify-center items-center">

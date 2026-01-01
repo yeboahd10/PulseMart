@@ -175,13 +175,14 @@ const PaystackCallback = () => {
                     // create purchase doc and deduct balance atomically
                     const purchasesCol = collection(db, 'purchases')
                     const newPurchaseRef = doc(purchasesCol)
+                    let savedPurchaseId = null
 
-                    await runTransaction(db, async (tx) => {
-                      const userSnap = await tx.get(userRef)
-                      const current = Number(userSnap.exists() ? (userSnap.data().balance ?? userSnap.data().wallet ?? 0) : 0)
+                    await runTransaction(db, async (tx2) => {
+                      const userSnap2 = await tx2.get(userRef)
+                      const current = Number(userSnap2.exists() ? (userSnap2.data().balance ?? userSnap2.data().wallet ?? 0) : 0)
                       const newBal = Number(Math.max(0, (current - displayPrice)).toFixed(2))
 
-                      tx.update(userRef, { balance: newBal })
+                      tx2.update(userRef, { balance: newBal })
 
                       const purchaseDoc = {
                         userId: userRef.id || (fbUser && fbUser.uid) || null,
@@ -196,11 +197,19 @@ const PaystackCallback = () => {
                         status: resp?.status || resp?.order_status || (resp?.data && resp.data.status) || 'success'
                       }
 
-                      tx.set(newPurchaseRef, purchaseDoc)
+                      tx2.set(newPurchaseRef, purchaseDoc)
 
                       // also update marker doc with reference to purchase doc id
-                      tx.update(markerRef, { purchaseDocId: newPurchaseRef.id, purchaseSavedAt: serverTimestamp() })
+                      tx2.update(markerRef, { purchaseDocId: newPurchaseRef.id, purchaseSavedAt: serverTimestamp() })
+
+                      savedPurchaseId = newPurchaseRef.id
                     })
+
+                    // if we saved a purchase id, navigate to dashboard with query params to show success modal
+                    if (savedPurchaseId) {
+                      navigate(`/dashboard?purchaseSaved=1&purchaseId=${encodeURIComponent(savedPurchaseId)}`)
+                      return
+                    }
                   }
                 } catch (sErr) {
                   console.error('Failed to save purchase record or deduct balance after auto-purchase', sErr)
