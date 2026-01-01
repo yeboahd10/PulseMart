@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
-import { doc, getDoc, collection, query, where, getDocs, serverTimestamp, runTransaction, setDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, getDocs, serverTimestamp, runTransaction, setDoc, addDoc } from 'firebase/firestore'
 import axios from 'axios'
 import { db } from './firebase'
 import Spinner from './components/Spinner'
@@ -162,6 +162,48 @@ const PaystackCallback = () => {
                   await setDoc(markerRef, { purchaseExecuted: true, purchaseResponse: purchaseResp?.data || null, purchaseAttemptedAt: serverTimestamp() }, { merge: true })
                 } catch (uErr) {
                   console.error('Failed to update paystack marker with purchase result', uErr)
+                }
+
+                // If purchase succeeded, save purchase record in Firestore and deduct the full bundle price
+                try {
+                  const resp = purchaseResp?.data || {}
+                  const success = resp?.status === 'success' || resp?.success === true || resp?.order_status === 'success' || resp?.data?.status === 'success'
+                  if (success) {
+                    // determine display price: prefer metadata.displayPrice, fall back to response fields
+                    const displayPrice = Number(purchaseMeta.displayPrice ?? purchaseMeta.display_price ?? resp?.displayPrice ?? resp?.data?.displayPrice ?? resp?.price ?? resp?.data?.price ?? 0) || 0
+
+                    // create purchase doc and deduct balance atomically
+                    const purchasesCol = collection(db, 'purchases')
+                    const newPurchaseRef = doc(purchasesCol)
+
+                    await runTransaction(db, async (tx) => {
+                      const userSnap = await tx.get(userRef)
+                      const current = Number(userSnap.exists() ? (userSnap.data().balance ?? userSnap.data().wallet ?? 0) : 0)
+                      const newBal = Number(Math.max(0, (current - displayPrice)).toFixed(2))
+
+                      tx.update(userRef, { balance: newBal })
+
+                      const purchaseDoc = {
+                        userId: userRef.id || (fbUser && fbUser.uid) || null,
+                        network: purchaseMeta.network || '',
+                        phoneNumber: purchaseMeta.phoneNumber || purchaseMeta.phone || '',
+                        capacity: purchaseMeta.capacity || purchaseMeta.size || purchaseMeta.bundle || '',
+                        price: Number(displayPrice) || 0,
+                        displayPrice: Number(displayPrice) || 0,
+                        transactionReference: resp?.transactionReference || resp?.transaction_ref || resp?.tx_ref || resp?.reference || resp?.data?.transactionReference || resp?.data?.reference || null,
+                        rawResponse: resp,
+                        createdAt: serverTimestamp(),
+                        status: resp?.status || resp?.order_status || (resp?.data && resp.data.status) || 'success'
+                      }
+
+                      tx.set(newPurchaseRef, purchaseDoc)
+
+                      // also update marker doc with reference to purchase doc id
+                      tx.update(markerRef, { purchaseDocId: newPurchaseRef.id, purchaseSavedAt: serverTimestamp() })
+                    })
+                  }
+                } catch (sErr) {
+                  console.error('Failed to save purchase record or deduct balance after auto-purchase', sErr)
                 }
               }
             } catch (autoErr) {
