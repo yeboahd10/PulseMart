@@ -131,7 +131,11 @@ const AT = () => {
               network: b.network,
               phoneNumber: phone,
               capacity: b.dataAmount,
+              // persist UI/local price fields in addition to API price
               price: actualPrice,
+              displayPrice: Number(b.price) || 0,
+              display_price: Number(b.price) || 0,
+              localPrice: Number(b.price) || 0,
               createdAt: serverTimestamp(),
             })
 

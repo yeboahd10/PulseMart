@@ -73,6 +73,8 @@ app.post('/api/paystack/verify', async (req, res) => {
     const { reference } = req.body || {}
     if (!reference) return res.status(400).json({ message: 'Missing reference' })
 
+    
+
     const secret = _sanitizedSecret
     if (!secret) return res.status(500).json({ message: 'Paystack secret key not configured. Set PAYSTACK_SECRET_KEY in .env' })
     if (String(secret).startsWith('pk_')) return res.status(500).json({ message: 'Paystack public key detected (pk_...). Use the secret key (sk_test_... or sk_live_...) in PAYSTACK_SECRET_KEY' })

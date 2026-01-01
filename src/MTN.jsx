@@ -124,7 +124,11 @@ const MTN = () => {
               network: b.network,
               phoneNumber: phone,
               capacity: b.dataAmount,
+              // store both API price and local/display price so dashboard shows local prices
               price: actualPrice,
+              displayPrice: Number(b.price) || 0,
+              display_price: Number(b.price) || 0,
+              localPrice: Number(b.price) || 0,
               createdAt: serverTimestamp(),
             })
 

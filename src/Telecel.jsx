@@ -111,7 +111,11 @@ const Telecel = () => {
               network: b.network,
               phoneNumber: phone,
               capacity: b.dataAmount,
+              // include local/display price fields so Dashboard shows UI prices
               price: actualPrice,
+              displayPrice: Number(b.price) || 0,
+              display_price: Number(b.price) || 0,
+              localPrice: Number(b.price) || 0,
               createdAt: serverTimestamp(),
             })
 

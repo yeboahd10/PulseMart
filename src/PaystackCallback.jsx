@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
-import { doc, getDoc, collection, query, where, getDocs, serverTimestamp, runTransaction } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, getDocs, serverTimestamp, runTransaction, setDoc } from 'firebase/firestore'
+import axios from 'axios'
 import { db } from './firebase'
 import Spinner from './components/Spinner'
 import { getAuth } from 'firebase/auth'
@@ -129,7 +130,44 @@ const PaystackCallback = () => {
               console.warn('Failed to update auth context after payment', e)
             }
 
-            // no automatic purchase after top-up; user should place orders manually
+            // attempt automatic purchase if Paystack transaction included purchase metadata
+            try {
+              const meta = tx.metadata || {}
+              const purchaseMeta = meta.purchase || null
+              if (purchaseMeta) {
+                const purchaseEndpoint = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
+                  ? '/.netlify/functions/purchase-proxy'
+                  : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy')
+
+                const payload = {
+                  phoneNumber: purchaseMeta.phoneNumber || purchaseMeta.phone || '',
+                  network: purchaseMeta.network || '',
+                  capacity: purchaseMeta.capacity || purchaseMeta.size || purchaseMeta.bundle || '',
+                  gateway: 'wallet'
+                }
+
+                const headers = { 'Content-Type': 'application/json' }
+                if (import.meta.env.VITE_API_KEY) headers['X-API-Key'] = import.meta.env.VITE_API_KEY
+
+                let purchaseResp = null
+                try {
+                  purchaseResp = await axios.post(purchaseEndpoint, payload, { headers })
+                  console.log('Automatic purchase response', purchaseResp?.data)
+                } catch (pErr) {
+                  console.error('Automatic purchase failed', pErr)
+                }
+
+                // record purchase attempt/result on the marker doc so we don't run it again
+                try {
+                  await setDoc(markerRef, { purchaseExecuted: true, purchaseResponse: purchaseResp?.data || null, purchaseAttemptedAt: serverTimestamp() }, { merge: true })
+                } catch (uErr) {
+                  console.error('Failed to update paystack marker with purchase result', uErr)
+                }
+              }
+            } catch (autoErr) {
+              console.error('Auto-purchase processing failed', autoErr)
+            }
+
             navigate('/dashboard')
           } catch (err) {
             if (String(err.message || '').includes('ALREADY_PROCESSED')) {
