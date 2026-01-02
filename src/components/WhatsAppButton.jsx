@@ -31,25 +31,12 @@ const WhatsAppButton = ({ message = '', channel = 'https://whatsapp.com/channel/
   }
 
   const labelStyle = {
-    backgroundColor: '#25D366',
+    backgroundColor: 'rgba(0,0,0,0.8)',
     color: '#fff',
     padding: '6px 10px',
-    borderRadius: 16,
+    borderRadius: 20,
     fontSize: 12,
-    marginBottom: 6,
-    opacity: visible ? 1 : 0,
-    transform: visible ? 'translateY(0)' : 'translateY(6px)',
-    transition: 'opacity 300ms ease, transform 300ms ease',
-    pointerEvents: 'none'
-  }
-
-  const arrowStyle = {
-    width: 0,
-    height: 0,
-    borderLeft: '8px solid transparent',
-    borderRight: '8px solid transparent',
-    borderTop: '8px solid #25D366',
-    marginTop: -2,
+    marginBottom: 8,
     opacity: visible ? 1 : 0,
     transform: visible ? 'translateY(0)' : 'translateY(6px)',
     transition: 'opacity 300ms ease, transform 300ms ease',
@@ -74,7 +61,6 @@ const WhatsAppButton = ({ message = '', channel = 'https://whatsapp.com/channel/
   return (
     <div style={wrapperStyle}>
       <div style={labelStyle}>Join our channel</div>
-      <div style={arrowStyle} />
       <a href={url} target="_blank" rel="noopener noreferrer" aria-label="Chat on WhatsApp" style={buttonStyle}>
         <FaWhatsapp size={28} />
       </a>
