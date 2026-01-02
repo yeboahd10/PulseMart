@@ -5,12 +5,13 @@ import { useAuth } from "./context/AuthContext";
 import { FaWallet, FaChevronLeft, FaChevronRight, FaList } from "react-icons/fa";
 import { CgProfile } from "react-icons/cg";
 import { FaCartPlus } from "react-icons/fa";
-import { FaCediSign, FaLock } from "react-icons/fa6";
+import { FaCediSign, FaLock ,FaRegCopyright} from "react-icons/fa6";
 import { Link } from "react-router-dom";
 import { doc, setDoc, onSnapshot, collection, query, where, orderBy } from 'firebase/firestore'
 import { db, auth } from './firebase'
 import { updateProfile } from 'firebase/auth'
 import PaymentModal from './components/PaymentModal'
+import BundleCardSimple from './components/BundleCardSimple.jsx'
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -84,6 +85,12 @@ const Dashboard = () => {
     },
     { id: "profile", icon: <CgProfile size="1.5em" />, label: "Profile" },
   ];
+
+  const quickBundles = [
+    { id: 'mtn', network: 'MTN', dataAmount: '1GB', price: '5.00' },
+    { id: 'telecel', network: 'Telecel', dataAmount: '500MB', price: '3.00' },
+    { id: 'at', network: 'AirtelTigo', dataAmount: '2GB', price: '8.00' }
+  ]
 
   useEffect(() => {
     if (!user?.uid) { setOrders([]); return }
@@ -226,36 +233,37 @@ const Dashboard = () => {
       <div>
         {selected === "wallet" && (
           <div>
-            <div className="m-3 p-5  rounded-box shadow-md bg-blue-500 text-white ">
+            <div className="m-3 p-3 sm:p-5 rounded-box shadow-md bg-blue-500 text-white">
               <div className="flex flex-col">
                 <div className="flex justify-between items-center mb-4">
                   <div>
-                    <p className="">Available Balance</p>
-                    <h2 className="text-4xl font-bold">
-                      <FaCediSign size={30} className="inline mr-1 " />
+                    <p className="text-sm sm:text-base">Available Balance</p>
+                    <h2 className="text-2xl sm:text-4xl font-bold">
+                      <FaCediSign className="inline mr-1 text-xl sm:text-3xl" />
                       {(Number(availableBalance || 0)).toFixed(2)}
                     </h2>
                   </div>
                   <div>
-                    <FaWallet size="3em" className="ml-10 text-white  " />
+                    <FaWallet className="ml-6 text-2xl sm:ml-10 sm:text-3xl md:text-4xl text-white" />
                   </div>
                 </div>
 
                 <hr />
-                <div className="text-center mt-2">
-                  <p>Your balance is availble for use</p>
+                <div className="text-center mt-2 mb-3">
+                  <p className="text-xs sm:text-sm">Your balance is available for use</p>
                 </div>
 
                 <div>
                   <button
-                    className="btn btn-outline btn-light mt-5 w-full text-white border-white hover:bg-white hover:text-red-500"
                     onClick={() => setShowPayModal(true)}
+                    aria-label="Add funds"
+                    className="mx-auto block w-44 sm:w-full max-w-xs px-4 py-2 rounded-lg bg-white/20 text-white font-semibold shadow-sm hover:shadow-md transition-all border border-white/20 text-center"
                   >
                     Add Funds
                   </button>
                 </div>
-                 <div className="text-center  rounded-xl mt-2 justify-center items-center">
-                  <p className="text-sm mt-3"><FaLock className="inline-block mr-2" />Payment is secured by Paystack</p>
+                 <div className="text-center rounded-xl mt-2 justify-center items-center">
+                  <p className="text-xs sm:text-sm mt-3"><FaLock className="inline-block mr-2" />Payment is secured by Paystack</p>
                  </div>
                 {successModalOpen && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -277,8 +285,21 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="flex justify-center items-center">
-              <Link to="/"><button className="btn btn-primary m-3 w-full hover:bg-white hover:text-blue-500">Buy Bundle Now</button></Link>
             </div>
+
+            <div className="m-3">
+              <h4 className="font-semibold mb-2">Quick Bundles</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {quickBundles.map((b) => (
+                  <BundleCardSimple key={b.id} b={b} cta={{ label: 'Buy Bundle', to: `/${b.id}` }} />
+                ))}
+              </div>
+            </div>
+
+            <div className="flex mb-4 mt-8 text-center justify-center items-center gap-2 text-gray-500">
+                     <p><FaRegCopyright className="inline-block" /> 2025 PulseMart. All rights reserved.</p>
+            
+                  </div>
             <PaymentModal
               open={showPayModal}
               onClose={() => setShowPayModal(false)}
@@ -382,7 +403,7 @@ const Dashboard = () => {
                     })
                     if (filtered.length === 0) return (<tr><td colSpan={6} className="text-center py-6">No orders yet</td></tr>)
 
-                    const pageSize = 1
+                    const pageSize = 3
                     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
                     const page = Math.min(Math.max(1, currentPage), totalPages)
                     const pageItems = showAllOrders ? filtered : filtered.slice((page-1)*pageSize, page*pageSize)
@@ -426,30 +447,44 @@ const Dashboard = () => {
               </table>
 
               {/* pagination controls */}
-              <div className="flex items-center justify-between mt-3">
-                <div>
-                  {orders.length > 1 && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => setShowAllOrders(!showAllOrders)}
-                        title={showAllOrders ? 'Show latest only' : 'View all orders'}
-                      >
-                        <FaList />
-                      </button>
+              {/* pagination controls */}
+              {(() => {
+                const q2 = String(filterQuery || '').trim().toLowerCase()
+                const filtered2 = orders.filter((o) => {
+                  if (!q2) return true
+                  return (String(o.phoneNumber || '').toLowerCase().includes(q2) || String(o.transactionId || '').toLowerCase().includes(q2))
+                })
+                const pageSize2 = 3
+                const totalPages2 = Math.max(1, Math.ceil(filtered2.length / pageSize2))
+                const page2 = Math.min(Math.max(1, currentPage), totalPages2)
+
+                return (
+                  <div className="flex items-center justify-between mt-3">
+                    <div>
+                      {filtered2.length > pageSize2 && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => setShowAllOrders(!showAllOrders)}
+                            title={showAllOrders ? 'Show latest only' : 'View all orders'}
+                          >
+                            <FaList />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {!showAllOrders && orders.length > 1 && (
-                    <>
-                      <button className="btn btn-sm btn-ghost" onClick={() => setCurrentPage((p) => Math.max(1, p-1))} disabled={currentPage <= 1}><FaChevronLeft /></button>
-                      <div className="text-sm text-gray-600">{Math.min(currentPage, Math.max(1, orders.length))}/{Math.max(1, orders.length)}</div>
-                      <button className="btn btn-sm btn-ghost" onClick={() => setCurrentPage((p) => Math.min(Math.max(1, orders.length), p+1))} disabled={currentPage >= Math.max(1, orders.length)}><FaChevronRight /></button>
-                    </>
-                  )}
-                </div>
-              </div>
+                    <div className="flex items-center gap-2">
+                      {!showAllOrders && filtered2.length > pageSize2 && (
+                        <>
+                          <button className="btn btn-sm btn-ghost" onClick={() => setCurrentPage((p) => Math.max(1, p-1))} disabled={page2 <= 1}><FaChevronLeft /></button>
+                          <div className="text-sm text-gray-600">{page2}/{totalPages2}</div>
+                          <button className="btn btn-sm btn-ghost" onClick={() => setCurrentPage((p) => Math.min(totalPages2, p+1))} disabled={page2 >= totalPages2}><FaChevronRight /></button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </div>
         )}
