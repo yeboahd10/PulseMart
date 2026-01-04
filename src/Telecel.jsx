@@ -179,7 +179,7 @@ const Telecel = () => {
         <div className="w-full max-w-4xl px-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
             {bundles.map((b, idx) => (
-              <div key={idx} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }}>
+              <div key={idx} className={'menu-item'} style={{ ['--delay']: `${idx * 60}ms` }} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }}>
                 <BundleCard b={b} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }} />
               </div>
             ))}

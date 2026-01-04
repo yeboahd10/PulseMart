@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { TiTick } from "react-icons/ti";
 import { FaRegCopyright } from "react-icons/fa6";
 import { Link, useNavigate } from "react-router-dom";
@@ -12,6 +12,28 @@ const Home = () => {
   const navigate = useNavigate()
   const [notice, setNotice] = useState('')
 
+  useEffect(() => {
+    const els = Array.from(document.querySelectorAll('[data-reveal]'))
+    if (!els.length) return
+    const obs = new IntersectionObserver((entries, observer) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible')
+          observer.unobserve(entry.target)
+        }
+      })
+    }, { threshold: 0.12 })
+
+    els.forEach((el, i) => {
+      // add base reveal class and a small stagger
+      el.classList.add('reveal')
+      el.style.transitionDelay = `${i * 80}ms`
+      obs.observe(el)
+    })
+
+    return () => obs.disconnect()
+  }, [])
+
   const handleBuy = (path) => {
     if (user) {
       navigate(path)
@@ -23,14 +45,14 @@ const Home = () => {
 
   return (
     <div className="flex justify-center items-center flex-col mt-8 ">
-      <div className="flex text-center flex-col">
-        <h4 className="text-3xl lg:text-4xl font-bold">Your most Trusted</h4>
-        <h4 className="text-3xl lg:text-4xl font-bold text-blue-500">
+      <div className="flex text-center flex-col" data-reveal>
+        <h4 className="text-3xl lg:text-4xl font-bold" data-reveal>Your most Trusted</h4>
+        <h4 className="text-3xl lg:text-4xl font-bold text-blue-500" data-reveal>
           Affordable Data Plug
         </h4>
       </div>
-      <div className="flex text-center mt-5">
-        <p className="lg:text-lg">
+      <div className="flex text-center mt-5" data-reveal>
+        <p className="lg:text-lg" data-reveal>
           Welcome to PulseMart.
           <br />
           Get high-quality and affordable data bundles
@@ -38,8 +60,8 @@ const Home = () => {
           <br /> "Fast.Reliable.Affordable-All in one Place"
         </p>
       </div>
-      <div className="font-bold text-2xl mt-8">
-        <h3>Select your Provider</h3>
+      <div className="font-bold text-2xl mt-8" data-reveal>
+        <h3 data-reveal>Select your Provider</h3>
       </div >
       {notice && (
         <div className="w-full max-w-4xl mx-auto px-4">
@@ -48,7 +70,7 @@ const Home = () => {
       )}
       <div className="lg:flex lg:justify-center lg:items-center gap-8">
         <div >
-        <div className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-yellow-50">
+        <div data-reveal className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-yellow-50">
           <figure>
             <img
               src={mtn}
@@ -81,7 +103,7 @@ const Home = () => {
         </div>
       </div>
       <div>
-        <div className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-red-50">
+      <div data-reveal className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-red-50">
           <figure>
             <img
               src={telecel}
@@ -114,7 +136,7 @@ const Home = () => {
         </div>
       </div>
       <div>
-        <div className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-blue-50">
+      <div data-reveal className="card bg-base-100 w-76 shadow-sm m-4 hover:shadow-lg transition-shadow duration-300 hover:bg-blue-50">
           <figure>
             <img
               src={at}

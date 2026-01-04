@@ -5,6 +5,7 @@ import { FaCediSign } from "react-icons/fa6";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false)
+    let animIndex = 0
 
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -56,9 +57,9 @@ const Navbar = () => {
        
         <div className='sm:hidden flex items-center pr-4'>
           {user && (
-            <div className='mr-2 px-2 py-1 bg-gray-100 text-xs rounded-md border shadow-sm text-gray-700 min-w-16 text-center flex items-center justify-center'>
+            <div className='mr-2 px-3 py-1 rounded-md min-w-16 text-center flex items-center justify-center backdrop-blur-sm bg-blue-100/60 border border-white/30 shadow-sm text-gray-700'>
               <FaCediSign className='inline-block mr-1' />
-              <span>{formattedBalance}</span>
+              <span className='font-geom'>{formattedBalance}</span>
             </div>
           )}
           <button onClick={() => setOpen(!open)} aria-expanded={open} aria-label='Toggle menu' className='p-2'>
@@ -79,7 +80,7 @@ const Navbar = () => {
       {open && (
         <div className='sm:hidden fixed left-3 right-3 top-14 z-40 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200'>
           <div className='flex flex-col divide-y divide-gray-100'>
-            <Link to="/" onClick={closeMenu} className='flex items-center gap-3 px-4 py-3 hover:bg-gray-50'>
+            <Link to="/" onClick={closeMenu} className={'flex items-center gap-3 px-4 py-3 hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
               <span className='w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center'>
                 <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 text-blue-600' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z' />
@@ -90,7 +91,7 @@ const Navbar = () => {
 
             {user ? (
               <>
-                <div className='px-2'>
+                <div className={'px-2 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                   <button
                     onClick={() => setBuyOpen(!buyOpen)}
                     className='w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50'
@@ -109,20 +110,20 @@ const Navbar = () => {
 
                   {buyOpen && (
                     <div className='flex flex-col items-center mt-1 ml-14 mr-4 w-full divide-y divide-gray-200'>
-                      <Link to="/mtn" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50'>
+                      <Link to="/mtn" onClick={() => { setBuyOpen(false); closeMenu(); }} className={'flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                         <span className='text-amber-600'>MTN</span>
                       </Link>
-                      <Link to="/telecel" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50'>
+                      <Link to="/telecel" onClick={() => { setBuyOpen(false); closeMenu(); }} className={'flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                         <span className='text-red-600'>Telecel</span>
                       </Link>
-                      <Link to="/at" onClick={() => { setBuyOpen(false); closeMenu(); }} className='flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50'>
+                      <Link to="/at" onClick={() => { setBuyOpen(false); closeMenu(); }} className={'flex items-center gap-3 px-4 py-3 w-full hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                         <span className='text-sky-600 text-center'>AT</span>
                       </Link>
                     </div>
                   )}
                 </div>
 
-                <Link to="/dashboard" onClick={closeMenu} className='flex items-center gap-3 px-4 py-3 hover:bg-gray-50'>
+                <Link to="/dashboard" onClick={closeMenu} className={'flex items-center gap-3 px-4 py-3 hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                   <span className='w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center'>
                     <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 text-gray-700' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
                       <rect x='3' y='3' width='7' height='7' strokeWidth='2' />
@@ -134,7 +135,7 @@ const Navbar = () => {
                 </Link>
 
                 {user?.email === 'akwasiappiah@gmail.com' && (
-                  <Link to="/admin" onClick={closeMenu} className='flex items-center gap-3 px-4 py-3 hover:bg-gray-50'>
+                  <Link to="/admin" onClick={closeMenu} className={'flex items-center gap-3 px-4 py-3 hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                     <span className='w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center'>
                       <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 text-yellow-600' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
                         <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z' />
@@ -144,7 +145,7 @@ const Navbar = () => {
                   </Link>
                 )}
 
-                <button onClick={() => { handleLogout(); closeMenu(); }} className='flex items-center gap-3 px-4 py-3 hover:bg-gray-50 w-full text-left'>
+                <button onClick={() => { handleLogout(); closeMenu(); }} className={'flex items-center gap-3 px-4 py-3 hover:bg-gray-50 w-full text-left menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                   <span className='w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center'>
                     <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 text-gray-700' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
                       <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M17 16l4-4m0 0l-4-4m4 4H7' />
@@ -156,7 +157,7 @@ const Navbar = () => {
               </>
             ) : (
               <>
-                <Link to="/login" onClick={closeMenu} className='flex items-center gap-3 px-4 py-3 hover:bg-gray-50'>
+                <Link to="/login" onClick={closeMenu} className={'flex items-center gap-3 px-4 py-3 hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                   <span className='w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center'>
                     <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 text-gray-700' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
                       <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M15 12a3 3 0 11-6 0 3 3 0 016 0z' />
@@ -166,7 +167,7 @@ const Navbar = () => {
                   <span className='flex-1 text-sm font-medium text-gray-800'>Login</span>
                 </Link>
 
-                <Link to="/signup" onClick={closeMenu} className='flex items-center gap-3 px-4 py-3 hover:bg-gray-50'>
+                <Link to="/signup" onClick={closeMenu} className={'flex items-center gap-3 px-4 py-3 hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
                   <span className='w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center'>
                     <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 text-blue-600' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
                       <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M12 4v16m8-8H4' />
