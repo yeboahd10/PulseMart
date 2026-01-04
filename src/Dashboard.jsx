@@ -12,6 +12,7 @@ import { db, auth } from './firebase'
 import { updateProfile } from 'firebase/auth'
 import PaymentModal from './components/PaymentModal'
 import BundleCardSimple from './components/BundleCardSimple.jsx'
+import Notice from './components/Notice'
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -187,6 +188,7 @@ const Dashboard = () => {
 
   return (
     <div>
+      <Notice />
       <div className="flex m-3 p-2 flex-col">
         <h3 className="font-bold text-3xl">Dashboard</h3>
         <p className="mt-2">
