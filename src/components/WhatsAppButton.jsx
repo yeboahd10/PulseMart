@@ -37,7 +37,7 @@ const WhatsAppButton = ({ message = '', channel = 'https://whatsapp.com/channel/
 
   const wrapperStyle = {
     position: 'fixed',
-    right: 20,
+    right: 5,
     bottom: 20,
     zIndex: 1000,
     display: 'flex',
