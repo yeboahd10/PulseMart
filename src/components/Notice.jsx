@@ -90,22 +90,7 @@ const Notice = () => {
   }
 
   if (dismissedForever) {
-    // show a small reset control so testers can bring the notice back
-    return (
-      <div className="fixed bottom-4 right-4 z-50">
-        <button
-          onClick={() => {
-            try {
-              localStorage.removeItem(STORAGE_KEY)
-              localStorage.removeItem(LAST_CLOSED_KEY)
-            } catch (e) {}
-            setDismissedForever(false)
-            setOpen(true)
-          }}
-          className="px-3 py-2 bg-yellow-400 text-slate-800 rounded shadow"
-        >Show notice</button>
-      </div>
-    )
+    return null
   }
 
   return (
