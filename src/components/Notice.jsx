@@ -34,7 +34,7 @@ const Notice = () => {
             <TiWarning className="text-sky-600" size={36} />
           </div>
           <div className="text-2xl font-calsans font-bold">NOTICE</div>
-          <div className="text-lg font-geom text-gray-700">We are working Today(Sunday).<br/> Delivery is very Smooth (1-10mins)<br/>Keep Orders coming</div>
+          <div className="text-lg font-geom text-gray-700">We are working Today.<br/> Delivery is very Smooth (1-10mins)<br/>Keep Orders coming</div>
           <div className="w-full">
             <button onClick={handleCloseOnce} className="w-full mt-4 px-4 py-2 rounded-lg bg-gray-200 text-gray-800">Dismiss</button>
           </div>
