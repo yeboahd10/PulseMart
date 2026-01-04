@@ -37,7 +37,7 @@ p, .prose p {
 	opacity: 0;
 	transform: translateX(24px);
 	animation-name: slideInRight;
-	animation-duration: 360ms;
+	animation-duration: 720ms;
 	animation-timing-function: cubic-bezier(.2,.9,.2,1);
 	animation-fill-mode: both;
 	animation-delay: var(--delay, 0ms);
@@ -47,7 +47,7 @@ p, .prose p {
 .reveal {
 	opacity: 0;
 	transform: translateY(16px);
-	transition: opacity 520ms ease, transform 520ms ease;
+	transition: opacity 720ms ease, transform 720ms ease;
 }
 .reveal.visible {
 	opacity: 1;
