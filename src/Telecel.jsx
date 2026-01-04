@@ -29,18 +29,22 @@ const Telecel = () => {
   const { bundles, setBundles, loading, error } = usePackages('Telecel', localPricesTelecel)
   const [successModalOpen, setSuccessModalOpen] = useState(false)
   const [successInfo, setSuccessInfo] = useState(null)
+  const [placing, setPlacing] = useState(false)
 
   
 
   const handleBuy = async () => {
     if (!bundles[selectedIndex]) return
+    setPlacing(true)
     const b = bundles[selectedIndex]
     if (!phone) {
       alert('Please enter a phone number')
+      setPlacing(false)
       return
     }
     if (!purchaseUrl) {
       alert('Purchase URL not configured')
+      setPlacing(false)
       return
     }
 
@@ -77,13 +81,16 @@ const Telecel = () => {
         await initPaystack(initPayload)
       } catch (err) {
         alert(`Payment initialization failed: ${err.response?.data?.message || err.message}`)
+        setPlacing(false)
       }
 
+      setPlacing(false)
       return
     }
     const actualPrice = b.apiPrice ?? null
     if (!actualPrice) {
       alert('Cannot purchase: price not available from API for this bundle')
+      setPlacing(false)
       return
     }
 
@@ -101,6 +108,7 @@ const Telecel = () => {
           const transactionReference = resp?.transactionReference || resp?.transaction_ref || resp?.tx_ref || resp?.reference || resp?.data?.transactionReference || null
           setSuccessInfo({ purchaseId, transactionReference })
           setSuccessModalOpen(true)
+          setPlacing(false)
           try {
             // save purchase
             await addDoc(collection(db, 'purchases'), {
@@ -138,12 +146,14 @@ const Telecel = () => {
           }
         } else {
           alert('Purchase request submitted but not successful — check response')
+          setPlacing(false)
         }
         setModalOpen(false)
       })
       .catch(err => {
         console.error('Telecel purchase error', err)
         alert('Purchase failed')
+        setPlacing(false)
       })
   }
 
@@ -216,7 +226,13 @@ const Telecel = () => {
 
               <div className="flex justify-end gap-3">
                 <button onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button onClick={handleBuy} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Place Order</button>
+                <button
+                  onClick={handleBuy}
+                  disabled={placing}
+                  className={"px-4 py-2 rounded-lg bg-blue-600 text-white " + (placing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700')}
+                >
+                  Place Order
+                </button>
               </div>
             </div>
           </div>

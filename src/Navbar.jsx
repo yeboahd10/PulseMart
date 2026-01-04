@@ -40,6 +40,9 @@ const Navbar = () => {
                 <span>{formattedBalance}</span>
               </div>
               <Link to="/dashboard" className='btn btn-ghost text-md'>Dashboard</Link>
+              {user?.email === 'akwasiappiah@gmail.com' && (
+                <Link to="/admin" className='btn btn-ghost text-md'>Admin</Link>
+              )}
               <button onClick={handleLogout} className='btn btn-ghost text-md'>Logout</button>
             </>
           ) : (
@@ -129,6 +132,17 @@ const Navbar = () => {
                   </span>
                   <span className='flex-1 text-sm font-medium text-gray-800'>Dashboard</span>
                 </Link>
+
+                {user?.email === 'akwasiappiah@gmail.com' && (
+                  <Link to="/admin" onClick={closeMenu} className='flex items-center gap-3 px-4 py-3 hover:bg-gray-50'>
+                    <span className='w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center'>
+                      <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 text-yellow-600' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z' />
+                      </svg>
+                    </span>
+                    <span className='flex-1 text-sm font-medium text-gray-800'>Admin</span>
+                  </Link>
+                )}
 
                 <button onClick={() => { handleLogout(); closeMenu(); }} className='flex items-center gap-3 px-4 py-3 hover:bg-gray-50 w-full text-left'>
                   <span className='w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center'>

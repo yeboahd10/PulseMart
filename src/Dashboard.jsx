@@ -178,12 +178,19 @@ const Dashboard = () => {
     return `${s.slice(0, 8)}...${s.slice(-6)}`
   }
 
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 18) return 'Good afternoon'
+    return 'Good evening'
+  }
+
   return (
     <div>
       <div className="flex m-3 p-2 flex-col">
         <h3 className="font-bold text-3xl">Dashboard</h3>
         <p className="mt-2">
-          Welcome back, {user?.fullName || user?.displayName || user?.email || "Guest"}
+          {getGreeting()}, {user?.fullName || user?.displayName || user?.email || "Guest"}
         </p>
       </div>
 

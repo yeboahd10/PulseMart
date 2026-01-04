@@ -9,6 +9,7 @@ import Dashboard from './Dashboard.jsx'
 import MTN from './MTN.jsx'
 import Telecel from './Telecel.jsx'
 import AT from './AT.jsx'
+import Admin from './Admin.jsx'
 import WhatsAppButton from './components/WhatsAppButton'
 import PaystackCallback from './PaystackCallback'
 
@@ -28,6 +29,7 @@ function App() {
         <Route path="/telecel" element={<Telecel />} />
         <Route path="/airteltigo" element={<AT />} />
         <Route path="/at" element={<AT />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="/paystack/callback" element={<PaystackCallback />} />
       </Routes>
       <WhatsAppButton phone="+233556665774" message="Hello! I need help with ...." />
