@@ -19,7 +19,7 @@ const purchaseUrl = (typeof window !== 'undefined' && window.location && window.
   ? '/.netlify/functions/purchase-proxy'
   : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy');
 
-const localPrices = [4.7, 9.4, 13.7, 18.5, 23.5, 27.2,35.5,44,62.5,83,105,129,166,207,407];
+const localPrices = [4.7, 9.4, 13.9, 18.7, 23.9, 27.9,35.7,44.5,62.5,83,105,129,166,207,407];
 const MTN = () => {
   const { user } = useAuth()
   const [modalOpen, setModalOpen] = useState(false);

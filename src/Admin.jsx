@@ -248,22 +248,13 @@ const Admin = () => {
       {/* Small screen: simplified cards */}
       <div className="sm:hidden space-y-3">
         {paginatedRows.map((r) => (
-          <div
-            key={r.uid}
-            className="p-4 rounded-xl shadow-lg border border-sky-100 bg-gradient-to-r from-sky-50 to-sky-100 hover:shadow-xl transition"
-          >
+          <div key={r.uid} className="p-4 rounded-xl shadow-lg border border-sky-100 bg-gradient-to-r from-sky-50 to-sky-100 hover:shadow-xl transition">
             <div className="flex justify-between items-center">
-              <div className="font-semibold text-slate-800  truncate">{r.email || '(no email)'}</div>
+              <div className="font-semibold text-slate-800 truncate">{r.email || '(no email)'}</div>
               <div>
                 {editingId === r.uid ? (
                   <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="w-24 px-2 py-1 border rounded text-sm"
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                    />
+                    <input type="number" step="0.01" className="w-24 px-2 py-1 border rounded text-sm" value={editingValue} onChange={(e) => setEditingValue(e.target.value)} />
                     <button
                       onClick={async () => {
                         const val = Number(editingValue)
@@ -294,35 +285,31 @@ const Admin = () => {
               </div>
             </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-700">
-                <div className="flex flex-col">
-                  <span className="text-xs text-sky-500">Network</span>
-                  <span className="font-medium">{r.lastOrder?.network || r.lastOrder?.raw?.metadata?.purchase?.network || r.lastOrder?.raw?.data?.network || '-'}</span>
-                </div>
+            <div className="mt-3 text-sm text-slate-700 space-y-2">
+              <div>
+                <span className="text-xs text-sky-500">Network</span>
+                <div className="font-medium">{r.lastOrder?.network || r.lastOrder?.raw?.metadata?.purchase?.network || r.lastOrder?.raw?.data?.network || '-'}</div>
+              </div>
 
-                <div className="flex flex-col">
-                  <span className="text-xs text-sky-500">Phone</span>
-                  <span className="font-medium">{r.lastOrder?.phoneNumber || r.lastOrder?.raw?.metadata?.purchase?.phoneNumber || r.lastOrder?.raw?.data?.phoneNumber || r.lastOrder?.raw?.phoneNumber || '-'}</span>
-                </div>
+              <div>
+                <span className="text-xs text-sky-500">Phone</span>
+                <div className="font-medium">{r.lastOrder?.phoneNumber || r.lastOrder?.raw?.metadata?.purchase?.phoneNumber || r.lastOrder?.raw?.data?.phoneNumber || r.lastOrder?.raw?.phoneNumber || '-'}</div>
+              </div>
 
-                <div className="flex flex-col">
-                  <span className="text-xs text-sky-500">Capacity</span>
-                  <span className="font-medium">{r.lastOrder?.capacity || r.lastOrder?.raw?.metadata?.purchase?.capacity || r.lastOrder?.raw?.data?.capacity || '-'}</span>
-                </div>
+              <div>
+                <span className="text-xs text-sky-500">Price</span>
+                <div className="font-medium">{r.lastOrder?.price ?? r.lastOrder?.raw?.data?.amount ?? r.lastOrder?.raw?.amount ?? '-'}</div>
+              </div>
 
-              
+              <div>
+                <span className="text-xs text-sky-500">Capacity</span>
+                <div className="font-medium">{r.lastOrder?.capacity || r.lastOrder?.raw?.metadata?.purchase?.capacity || r.lastOrder?.raw?.data?.capacity || '-'}</div>
+              </div>
 
-              <div className="col-span-2 text-xs text-slate-400 mt-2 flex items-center justify-between">
+              <div className="text-xs text-slate-400 mt-2 flex items-center justify-between">
                 <div className="text-xs text-slate-400">{formatDate(r.lastOrder?.createdAt || r.lastOrder?.raw?.data?.createdAt || r.lastOrder?.raw?.createdAt)}</div>
                 <div>
-                  <button
-                    onClick={async () => {
-                      // open inline editor for balance when clicking update on small screen
-                      setEditingId(r.uid)
-                      setEditingValue(String(Number(r.balance ?? r.wallet ?? 0)))
-                    }}
-                    className="ml-2 text-xs px-2 py-1 bg-white border rounded text-sky-600"
-                  >Update</button>
+                  <button onClick={async () => { setEditingId(r.uid); setEditingValue(String(Number(r.balance ?? r.wallet ?? 0))) }} className="ml-2 text-xs px-2 py-1 bg-white border rounded text-sky-600">Update</button>
                 </div>
               </div>
             </div>
