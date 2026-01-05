@@ -70,7 +70,8 @@ const Admin = () => {
             const price = data.price ?? data.displayPrice ?? raw?.data?.amount ?? raw?.amount ?? null
             const createdAt = data.createdAt || null
 
-            const normalized = { purchaseId, transactionReference, network, phoneNumber, price, createdAt, raw }
+            const capacity = data.capacity || data.size || data.bundle || raw?.metadata?.purchase?.capacity || raw?.metadata?.purchase?.size || raw?.metadata?.purchase?.bundle || raw?.data?.capacity || raw?.data?.size || raw?.data?.bundle || ''
+            const normalized = { purchaseId, transactionReference, network, phoneNumber, price, createdAt, capacity, raw }
             return { ...u, lastOrder: normalized }
           } catch (err) {
             console.error('Error fetching last purchase for user', u.uid, err)
@@ -217,10 +218,23 @@ const Admin = () => {
                 <td className="px-4 py-3">{r.lastOrder?.purchaseId || r.lastOrder?.transactionReference || r.lastOrder?.id || '-'}</td>
                 <td className="px-4 py-3">
                   {r.lastOrder ? (
-                    <div>
-                      <div>Network: {r.lastOrder.network || '-'}</div>
-                      <div>Phone: {r.lastOrder.phoneNumber || '-'}</div>
-                      <div>Price: {r.lastOrder.price ?? r.lastOrder.displayPrice ?? '-'}</div>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="text-sm text-slate-500">Network</div>
+                        <div className="font-medium">{r.lastOrder.network || r.lastOrder?.raw?.metadata?.purchase?.network || r.lastOrder?.raw?.data?.network || '-'}</div>
+
+                        <div className="mt-2">
+                          <div className="text-sm text-slate-500">Phone</div>
+                          <div className="font-medium">{r.lastOrder.phoneNumber || r.lastOrder.raw?.metadata?.purchase?.phoneNumber || r.lastOrder.raw?.data?.phoneNumber || r.lastOrder.raw?.phoneNumber || '-'}</div>
+
+                          <div className="text-xs text-slate-400 mt-1">Capacity: {r.lastOrder.capacity || r.lastOrder.raw?.metadata?.purchase?.capacity || r.lastOrder.raw?.data?.capacity || '-'}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col  ">
+                        <div className="text-xs text-slate-500">Price</div>
+                        <div className="font-medium">{r.lastOrder.price ?? r.lastOrder.displayPrice ?? r.lastOrder.raw?.data?.amount ?? r.lastOrder.raw?.amount ?? '-'}</div>
+                      </div>
                     </div>
                   ) : '-'}
                 </td>
@@ -280,21 +294,23 @@ const Admin = () => {
               </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-700">
-              <div className="flex flex-col">
-                <span className="text-xs text-sky-500">Network</span>
-                <span className="font-medium">{r.lastOrder?.network || r.lastOrder?.raw?.metadata?.purchase?.network || r.lastOrder?.raw?.data?.network || '-'}</span>
-              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-700">
+                <div className="flex flex-col">
+                  <span className="text-xs text-sky-500">Network</span>
+                  <span className="font-medium">{r.lastOrder?.network || r.lastOrder?.raw?.metadata?.purchase?.network || r.lastOrder?.raw?.data?.network || '-'}</span>
+                </div>
 
-              <div className="flex flex-col">
-                <span className="text-xs text-sky-500">Phone</span>
-                <span className="font-medium">{r.lastOrder?.phoneNumber || r.lastOrder?.raw?.metadata?.purchase?.phoneNumber || r.lastOrder?.raw?.data?.phoneNumber || r.lastOrder?.raw?.phoneNumber || '-'}</span>
-              </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-sky-500">Phone</span>
+                  <span className="font-medium">{r.lastOrder?.phoneNumber || r.lastOrder?.raw?.metadata?.purchase?.phoneNumber || r.lastOrder?.raw?.data?.phoneNumber || r.lastOrder?.raw?.phoneNumber || '-'}</span>
+                </div>
 
-              <div className="col-span-2 mt-1">
-                <span className="text-xs text-sky-500">Price:</span>
-                <span className="font-medium ml-1">{r.lastOrder?.price ?? r.lastOrder?.raw?.data?.amount ?? r.lastOrder?.raw?.amount ?? '-'}</span>
-              </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-sky-500">Capacity</span>
+                  <span className="font-medium">{r.lastOrder?.capacity || r.lastOrder?.raw?.metadata?.purchase?.capacity || r.lastOrder?.raw?.data?.capacity || '-'}</span>
+                </div>
+
+              
 
               <div className="col-span-2 text-xs text-slate-400 mt-2 flex items-center justify-between">
                 <div className="text-xs text-slate-400">{formatDate(r.lastOrder?.createdAt || r.lastOrder?.raw?.data?.createdAt || r.lastOrder?.raw?.createdAt)}</div>
