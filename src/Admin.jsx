@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { collection, getDocs, query, where, orderBy, limit, updateDoc, doc } from 'firebase/firestore'
+import { collection, getDocs, query, where, orderBy, limit, updateDoc, doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from './firebase'
 import { useAuth } from './context/AuthContext'
 
@@ -97,7 +97,19 @@ const Admin = () => {
 
         enriched.sort((a, b) => getTimestamp(b) - getTimestamp(a))
 
-        if (mountedRef.current) setRows(enriched)
+        if (mountedRef.current) {
+          setRows(enriched)
+          try {
+            const latestTs = enriched.length ? getTimestamp(enriched[0]) : Date.now()
+            const lastSeenRef = doc(db, 'meta', 'admin_last_seen')
+            const lastSeenSnap = await getDoc(lastSeenRef)
+            if (!lastSeenSnap.exists()) {
+              await setDoc(lastSeenRef, { ts: latestTs }, { merge: true })
+            }
+          } catch (e) {
+            console.warn('admin last-seen init error', e)
+          }
+        }
       } catch (err) {
         console.error('Admin load error', err)
         if (mountedRef.current) setError(err.message || 'Failed to load')

@@ -1,7 +1,11 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import logo from './assets/PULSEMART.png'
+import { FaBell } from 'react-icons/fa6'
 import { useAuth } from './context/AuthContext'
 import { FaCediSign } from "react-icons/fa6";
+import { db } from './firebase'
+import { collection, query, orderBy, limit, onSnapshot, getDoc, doc, setDoc } from 'firebase/firestore'
 
 const Navbar = () => {
   const [open, setOpen] = useState(false)
@@ -16,6 +20,53 @@ const Navbar = () => {
 
   const closeMenu = () => setOpen(false)
 
+  const ADMIN_EMAIL = 'akwasiappiah@gmail.com'
+  const [hasNewTx, setHasNewTx] = useState(false)
+  const [latestObserved, setLatestObserved] = useState(0)
+
+  useEffect(() => {
+    if (!user || user?.email !== ADMIN_EMAIL) return
+
+    const purchasesQuery = query(collection(db, 'purchases'), orderBy('createdAt', 'desc'), limit(1))
+    const lastSeenRef = doc(db, 'meta', 'admin_last_seen')
+
+    const unsub = onSnapshot(purchasesQuery, async (snap) => {
+      try {
+        const top = snap.docs[0]
+        if (!top) return
+        const data = top.data() || {}
+        const createdAt = data.createdAt || null
+
+        let latestTs = 0
+        if (createdAt?.toDate) latestTs = createdAt.toDate().getTime()
+        else if (typeof createdAt === 'number') latestTs = createdAt > 1e12 ? createdAt : createdAt * 1000
+        else latestTs = Date.parse(createdAt) || 0
+
+        setLatestObserved(latestTs)
+
+        const lastSeenSnap = await getDoc(lastSeenRef)
+        const lastSeen = lastSeenSnap.exists() ? Number(lastSeenSnap.data().ts || 0) : 0
+        setHasNewTx(latestTs > lastSeen)
+      } catch (err) {
+        console.warn('notif listener error', err)
+      }
+    })
+
+    return () => unsub()
+  }, [user])
+
+  const handleNotifClick = async () => {
+    try {
+      const lastSeenRef = doc(db, 'meta', 'admin_last_seen')
+      await setDoc(lastSeenRef, { ts: latestObserved || Date.now() }, { merge: true })
+    } catch (err) {
+      console.warn('failed to mark notifications read', err)
+    }
+    setHasNewTx(false)
+    setOpen(false)
+    navigate('/admin')
+  }
+
   const [buyOpen, setBuyOpen] = useState(false)
 
   const handleLogout = () => {
@@ -28,7 +79,9 @@ const Navbar = () => {
     <>
       <div className='sticky top-0 z-50 navbar shadow-sm flex-1 justify-between backdrop-blur-sm bg-white/70 border-b border-gray-200'>
         <div>
-          <Link to="/" className='btn btn-ghost text-2xl sm:text-4xl font-calsans font-bold text-blue-500 ml-1 sm:ml-1'>PulseMart</Link>
+          <Link to="/" className='btn btn-ghost ml-1 sm:ml-1' aria-label='Home'>
+            <img src={logo} alt="PulseMart" className='h-6 sm:h-12' />
+          </Link>
         </div>
 
         
@@ -40,6 +93,12 @@ const Navbar = () => {
                 <FaCediSign className='inline-block' />
                 <span>{formattedBalance}</span>
               </div>
+              {user?.email === 'akwasiappiah@gmail.com' && (
+                <button onClick={handleNotifClick} title='Notifications' className='relative btn btn-ghost'>
+                  <FaBell className='w-5 h-5' />
+                  {hasNewTx && <span className='absolute top-0 right-0 inline-block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white'></span>}
+                </button>
+              )}
               <Link to="/dashboard" className='btn btn-ghost text-md'>Dashboard</Link>
               {user?.email === 'akwasiappiah@gmail.com' && (
                 <Link to="/admin" className='btn btn-ghost text-md'>Admin</Link>
@@ -61,6 +120,12 @@ const Navbar = () => {
               <FaCediSign className='inline-block mr-1' />
               <span className='font-geom'>{formattedBalance}</span>
             </div>
+          )}
+          {user?.email === 'akwasiappiah@gmail.com' && (
+            <button onClick={handleNotifClick} title='Notifications' className='relative p-2'>
+              <FaBell className='w-5 h-5' />
+              {hasNewTx && <span className='absolute top-1 right-1 inline-block h-2 w-2 rounded-full bg-red-500 ring-1 ring-white'></span>}
+            </button>
           )}
           <button onClick={() => setOpen(!open)} aria-expanded={open} aria-label='Toggle menu' className='p-2'>
             {!open ? (
