@@ -103,6 +103,12 @@ const Dashboard = () => {
         // Prefer display/local price fields when available; fall back to API price/amount
         const rawPrice = data.displayPrice ?? data.display_price ?? data.uiPrice ?? data.localPrice ?? data.price ?? data.amount ?? 0
         const displayPrice = Number(rawPrice || 0)
+        // derive status from multiple possible locations (top-level, nested provider responses, etc.)
+        const rawStatus = data.status || data.order_status || data.tx_status || data.orderStatus || data.order_status || data.txStatus || data.orderStatus ||
+          data.rawResponse?.status || data.rawResponse?.data?.status || data.apiResponse?.status || data.data?.status ||
+          data.raw?.status || data.raw?.data?.status || data.response?.status || data.message || ''
+        const normalizedStatus = String(rawStatus || '').trim().toLowerCase() || 'unknown'
+
         return {
           id: d.id,
           networkNumber: `${data.network || ''} • ${data.phoneNumber || data.phone || ''}`.trim(),
@@ -110,7 +116,7 @@ const Dashboard = () => {
           dataAmount: data.capacity || data.size || data.bundle || '',
           price: displayPrice.toFixed(2),
           transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.reference || data.transactionId || data.txId || data.id || '',
-          status: (data.status || data.order_status || data.tx_status || 'Unknown'),
+          status: normalizedStatus,
           createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : null,
           raw: data
         }
@@ -386,76 +392,83 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="overflow-x-auto">
-              {
-                /* compute filtered orders */
-              }
-              
-              
-              <table className="table w-full min-w-160 border-collapse">
-                <thead>
-                  <tr className="border-b-2 border-black-light-50">
-                    <th className="text-left font-bold text-black">Network</th>
-                    <th className="text-left text-black">Phone</th>
-                    <th className="text-left text-black">Data Amount</th>
-                    <th className="text-left text-black">Price (¢)</th>
-                    <th className="text-left text-black">Transaction ID</th>
-                    <th className="text-left text-black">Date & Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* pagination: show only current page (page size = 1) unless showAllOrders is true */}
-                  {(() => {
-                    const q = String(filterQuery || '').trim().toLowerCase()
-                    const filtered = orders.filter((o) => {
-                      if (!q) return true
-                      return (String(o.phoneNumber || '').toLowerCase().includes(q) || String(o.transactionId || '').toLowerCase().includes(q))
-                    })
-                    if (filtered.length === 0) return (<tr><td colSpan={6} className="text-center py-6">No orders yet</td></tr>)
+              {(() => {
+                const q = String(filterQuery || '').trim().toLowerCase()
+                const filtered = orders.filter((o) => {
+                  if (!q) return true
+                  return (String(o.phoneNumber || '').toLowerCase().includes(q) || String(o.transactionId || '').toLowerCase().includes(q))
+                })
+                if (filtered.length === 0) return (<div className="text-center py-6">No orders yet</div>)
 
-                    const pageSize = 3
-                    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-                    const page = Math.min(Math.max(1, currentPage), totalPages)
-                    const pageItems = showAllOrders ? filtered : filtered.slice((page-1)*pageSize, page*pageSize)
+                const pageSize = 3
+                const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+                const page = Math.min(Math.max(1, currentPage), totalPages)
+                const pageItems = showAllOrders ? filtered : filtered.slice((page-1)*pageSize, page*pageSize)
 
-                    return pageItems.map((o) => (
-                      <tr key={o.id} className="border-b-2 border-gray-300">
-                        <td>{o.networkNumber}</td>
-                        <td className="font-mono text-sm">{o.phoneNumber}</td>
-                        <td>{o.dataAmount}</td>
-                        <td>
-                          <FaCediSign className="inline mr-1" />
-                          {o.price}
-                        </td>
-                        <td className="break-all text-sm text-gray-700 flex items-center gap-2">
-                          <span className="font-mono">
-                            {truncate(o.transactionId)}
-                          </span>
-                          <button
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(o.transactionId || '')
-                                setCopiedId(o.id)
-                                setTimeout(() => setCopiedId(null), 1500)
-                              } catch (err) {
-                                console.error('Copy failed', err)
-                              }
-                            }}
-                            className="btn btn-xs btn-ghost"
-                            title="Copy transaction id"
-                          >
-                            {copiedId === o.id ? 'Copied' : 'Copy'}
-                          </button>
-                        </td>
-                        <td>
-                          {o.createdAt && <div className="text-xs text-gray-400 mt-1">{o.createdAt.toLocaleString()}</div>}
-                        </td>
-                      </tr>
-                    ))
-                  })()}
-                </tbody>
-              </table>
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {pageItems.map((o) => (
+                      <div key={o.id} className="p-3 rounded-lg shadow-sm border border-sky-100 bg-gradient-to-r from-sky-50 to-sky-100 hover:shadow-md transition font-geom">
+                        <div className="flex justify-between items-center">
+                          <div className="font-semibold text-slate-800 truncate">{o.networkNumber}</div>
+                          <div className="text-sm font-medium text-sky-700 bg-white/60 px-2 py-1 rounded">{Number(o.price || 0).toFixed(2)}</div>
+                        </div>
 
-              {/* pagination controls */}
+                        <div className="mt-2 text-sm text-slate-700 space-y-1">
+                          <div className="grid grid-cols-2 gap-2 items-start">
+                            <div>
+                              <div className="text-[10px] text-sky-500">Phone</div>
+                              <div className="font-mono text-sm">{o.phoneNumber || '-'}</div>
+                            </div>
+
+                            <div>
+                              <div className="text-[10px] text-sky-500">Data</div>
+                              <div className="font-medium text-sm">{o.dataAmount || '-'}</div>
+                            </div>
+
+                            <div>
+                              <div className="text-[10px] text-sky-500">Status</div>
+                              <div className="mt-1">
+                                {(() => {
+                                  const s = String(o.status || 'unknown').toLowerCase()
+                                  const label = s === 'success' ? 'Delivered' : (s === 'pending' ? 'Pending' : (s === 'unknown' ? 'Unknown' : (s.charAt(0).toUpperCase() + s.slice(1))))
+                                  const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800')
+                                  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${badgeClass}`}>{label}</span>
+                                })()}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="text-[10px] text-sky-500">Transaction</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="font-mono break-all text-sm">{truncate(o.transactionId)}</span>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(o.transactionId || '')
+                                      setCopiedId(o.id)
+                                      setTimeout(() => setCopiedId(null), 1500)
+                                    } catch (err) {
+                                      console.error('Copy failed', err)
+                                    }
+                                  }}
+                                  className="btn btn-xs btn-ghost"
+                                  title="Copy transaction id"
+                                >
+                                  {copiedId === o.id ? 'Copied' : 'Copy'}
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="col-span-2 text-xs text-slate-400 mt-1">{o.createdAt ? o.createdAt.toLocaleString() : '-'}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
               {/* pagination controls */}
               {(() => {
                 const q2 = String(filterQuery || '').trim().toLowerCase()
