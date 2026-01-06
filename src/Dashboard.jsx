@@ -433,7 +433,29 @@ const Dashboard = () => {
                               <div className="font-medium text-sm">{o.dataAmount || '-'}</div>
                             </div>
 
-                            {/* Status column removed per request */}
+                            <div>
+                              <div className="text-[10px] text-sky-500">Status</div>
+                              <div className="mt-1">
+                                {(() => {
+                                  const createdTs = o.createdAt ? (o.createdAt.getTime ? o.createdAt.getTime() : new Date(o.createdAt).getTime()) : null
+                                  let s
+                                  // Prefer timestamp when available: <2 hours => Processing, otherwise Delivered
+                                  if (createdTs) {
+                                    const diffHours = (now - createdTs) / 3600000
+                                    s = diffHours < 2 ? 'processing' : 'success'
+                                  } else {
+                                    const raw = String(o.status || '').toLowerCase()
+                                    if (raw === 'success' || raw === 'delivered') s = 'success'
+                                    else if (raw === 'processing' || raw === 'pending') s = raw
+                                    else s = 'unknown'
+                                  }
+
+                                  const label = s === 'success' ? 'Delivered' : (s === 'processing' ? 'Processing' : (s === 'unknown' ? 'Unknown' : (s.charAt(0).toUpperCase() + s.slice(1))))
+                                  const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'processing' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800')
+                                  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${badgeClass}`}>{label}</span>
+                                })()}
+                              </div>
+                            </div>
 
                             <div>
                               <div className="text-[10px] text-sky-500">Transaction</div>
