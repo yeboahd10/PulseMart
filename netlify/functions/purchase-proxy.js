@@ -25,6 +25,34 @@ exports.handler = async (event) => {
 
     const body = event.body ? JSON.parse(event.body) : {}
 
+    // normalize and validate incoming purchase payload to match DataMart API expectations
+    const normalizeNetwork = (net) => {
+      if (!net) return net
+      const s = String(net).toUpperCase()
+      if (s === 'AT' || s.includes('AIRTEL') || s.includes('TIGO') || s.includes('AT_PREMIUM')) return 'AT_PREMIUM'
+      if (s === 'MTN' || s === 'YELLO' || s.includes('YELLO')) return 'YELLO'
+      if (s.includes('TELECEL')) return 'TELECEL'
+      return s
+    }
+
+    // ensure required fields exist and are in the expected format
+    const phoneNumber = body.phoneNumber || body.phone || body.msisdn || ''
+    let network = body.network || body.net || ''
+    let capacity = body.capacity || body.size || body.data || ''
+
+    // coerce capacity to numeric GB string (e.g. '5')
+    capacity = String(capacity || '').replace(/[^0-9]/g, '')
+    network = normalizeNetwork(network)
+
+    if (!phoneNumber || !network || !capacity) {
+      return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Missing required fields: phoneNumber, network, capacity' }) }
+    }
+
+    // replace body fields with normalized values we will forward upstream
+    body.phoneNumber = String(phoneNumber)
+    body.network = network
+    body.capacity = String(capacity)
+
     const purchaseUrl = process.env.VITE_API_PURCHASE || process.env.API_PURCHASE || process.env.PURCHASE_URL || 'https://api.datamartgh.shop/api/developer/purchase'
     if (!purchaseUrl) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase API URL not configured' }) }
 

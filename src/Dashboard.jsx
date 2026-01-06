@@ -31,6 +31,7 @@ const Dashboard = () => {
   const [copiedId, setCopiedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showAllOrders, setShowAllOrders] = useState(false)
+  const [now, setNow] = useState(Date.now())
   const [searchParams, setSearchParams] = useSearchParams()
   const [successModalOpen, setSuccessModalOpen] = useState(false)
   const [successInfo, setSuccessInfo] = useState(null)
@@ -170,6 +171,12 @@ const Dashboard = () => {
     setCurrentPage(1)
     setShowAllOrders(false)
   }, [orders.length])
+
+  // tick `now` so status labels update over time
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 10000)
+    return () => clearInterval(id)
+  }, [])
 
   const hasChanges = () => {
     if (!user) return false
@@ -430,9 +437,22 @@ const Dashboard = () => {
                               <div className="text-[10px] text-sky-500">Status</div>
                               <div className="mt-1">
                                 {(() => {
-                                  const s = String(o.status || 'unknown').toLowerCase()
-                                  const label = s === 'success' ? 'Delivered' : (s === 'pending' ? 'Pending' : (s === 'unknown' ? 'Unknown' : (s.charAt(0).toUpperCase() + s.slice(1))))
-                                  const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800')
+                                  const raw = String(o.status || '').toLowerCase()
+                                  const createdTs = o.createdAt ? (o.createdAt.getTime ? o.createdAt.getTime() : new Date(o.createdAt).getTime()) : null
+                                  let s
+                                  if (raw === 'success' || raw === 'delivered') {
+                                    s = 'success'
+                                  } else if (createdTs) {
+                                    const diffMin = (now - createdTs) / 60000
+                                    if (diffMin < 5) s = 'pending'
+                                    else if (diffMin < 15) s = 'processing'
+                                    else s = 'success'
+                                  } else {
+                                    s = raw || 'unknown'
+                                  }
+
+                                  const label = s === 'success' ? 'Delivered' : (s === 'pending' ? 'Pending' : (s === 'processing' ? 'Processing' : (s === 'unknown' ? 'Unknown' : (s.charAt(0).toUpperCase() + s.slice(1)))))
+                                  const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'pending' ? 'bg-yellow-100 text-yellow-800' : (s === 'processing' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'))
                                   return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${badgeClass}`}>{label}</span>
                                 })()}
                               </div>

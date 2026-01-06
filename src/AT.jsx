@@ -111,9 +111,12 @@ const AT = () => {
     const headers = { 'Content-Type': 'application/json' }
     if (apiKey) headers['X-API-Key'] = apiKey
 
+    // log payload and context for debugging
+    console.log('AT purchase payload:', payload, 'headers:', headers, 'user:', { id: user?.uid, email: user?.email, balance: user?.balance }, 'bundle:', b)
+
     axios.post(purchaseUrl, payload, { headers })
       .then(async (res) => {
-        console.log('AT purchase resp:', res.data)
+        console.log('Purchase response:', res.data)
         const resp = res.data || {}
         const success = resp?.status === 'success' || resp?.success === true || resp?.order_status === 'success' || resp?.data?.status === 'success'
         if (success) {
@@ -161,9 +164,11 @@ const AT = () => {
         }
         setModalOpen(false)
       })
-      .catch(err => {
-        console.error('AT purchase error', err)
-        alert('Purchase failed')
+      .catch((err) => {
+        console.error('Purchase error:', err)
+        console.error('Purchase error response body:', err.response?.data)
+        const serverMsg = err.response?.data?.message || err.response?.data || err.message
+        alert(`Purchase failed: ${typeof serverMsg === 'string' ? serverMsg : JSON.stringify(serverMsg)}`)
       })
   }
 
