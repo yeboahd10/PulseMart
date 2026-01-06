@@ -433,30 +433,7 @@ const Dashboard = () => {
                               <div className="font-medium text-sm">{o.dataAmount || '-'}</div>
                             </div>
 
-                            <div>
-                              <div className="text-[10px] text-sky-500">Status</div>
-                              <div className="mt-1">
-                                {(() => {
-                                  const raw = String(o.status || '').toLowerCase()
-                                  const createdTs = o.createdAt ? (o.createdAt.getTime ? o.createdAt.getTime() : new Date(o.createdAt).getTime()) : null
-                                  let s
-                                  if (raw === 'success' || raw === 'delivered') {
-                                    s = 'success'
-                                  } else if (createdTs) {
-                                    const diffMin = (now - createdTs) / 60000
-                                    if (diffMin < 5) s = 'pending'
-                                    else if (diffMin < 15) s = 'processing'
-                                    else s = 'success'
-                                  } else {
-                                    s = raw || 'unknown'
-                                  }
-
-                                  const label = s === 'success' ? 'Delivered' : (s === 'pending' ? 'Pending' : (s === 'processing' ? 'Processing' : (s === 'unknown' ? 'Unknown' : (s.charAt(0).toUpperCase() + s.slice(1)))))
-                                  const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'pending' ? 'bg-yellow-100 text-yellow-800' : (s === 'processing' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'))
-                                  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${badgeClass}`}>{label}</span>
-                                })()}
-                              </div>
-                            </div>
+                            {/* Status column removed per request */}
 
                             <div>
                               <div className="text-[10px] text-sky-500">Transaction</div>
