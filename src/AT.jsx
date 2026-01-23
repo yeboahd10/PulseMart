@@ -19,7 +19,7 @@ const apiKey = import.meta.env.VITE_API_KEY
 const purchaseUrl = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
   ? '/.netlify/functions/purchase-proxy'
   : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy')
-const localPricesAT = [4.15, 8.55, 13.45, 16.70, 19.70,23.70,30.70,38.70,45.70,57.70,95.20,115.20,151.20,190.20]
+const localPricesAT = [4.35, 8.95, 13.85, 17.70, 21.00,24.70,33.70,41.70,47.70,57.70,95.20,115.20,151.20,190.20]
 
 const AT = () => {
   const { user } = useAuth()
