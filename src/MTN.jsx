@@ -3,6 +3,7 @@ import usePackages from './hooks/usePackages'
 import Spinner from './components/Spinner'
 import SkeletonGrid from './components/SkeletonGrid'
 import BundleCard from './components/BundleCard'
+import Notice from './components/Notice'
 import axios from "axios";
 import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef } from 'firebase/firestore'
 import { db } from './firebase'
@@ -183,6 +184,7 @@ const MTN = () => {
 
   return (
     <div>
+      <Notice />
       <div className="flex justify-center flex-col text-center items-center">
         <h2 className="text-3xl font-bold m-3">MTN Data Bundles</h2>
         <p className="mx-2">
@@ -241,7 +243,7 @@ const MTN = () => {
               <div className="flex justify-end gap-3">
                 <button onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">Cancel</button>
                 <button
-                  onClick={handleBuy}
+                  onClick={() => { setModalOpen(false); handleBuy(); }}
                   disabled={placing}
                   className={"px-4 py-2 rounded-lg bg-blue-600 text-white " + (placing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700')}
                 >

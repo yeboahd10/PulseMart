@@ -4,6 +4,7 @@ import usePackages from './hooks/usePackages'
 import Spinner from './components/Spinner'
 import SkeletonGrid from './components/SkeletonGrid'
 import BundleCard from './components/BundleCard'
+import Notice from './components/Notice'
 import axios from "axios";
 import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef } from 'firebase/firestore'
 import { db } from './firebase'
@@ -174,6 +175,7 @@ const AT = () => {
 
   return (
     <div>
+      <Notice />
       <div className="flex justify-center flex-col text-center items-center">
         <h2 className="text-3xl font-bold m-3">AT Data Bundles</h2>
         <p className="mx-2">AirtelTigo bundles at great value.</p>
@@ -230,7 +232,7 @@ const AT = () => {
 
               <div className="flex justify-end gap-3">
                 <button onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button onClick={handleBuy} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Buy</button>
+                <button onClick={() => { setModalOpen(false); handleBuy(); }} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Buy</button>
               </div>
             </div>
           </div>
