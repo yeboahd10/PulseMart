@@ -18,6 +18,10 @@ const Admin = () => {
   const [savingId, setSavingId] = useState(null)
   const [maintenance, setMaintenance] = useState(false)
   const [maintenanceMessage, setMaintenanceMessage] = useState('')
+  const [outOfStockMTN, setOutOfStockMTN] = useState(false)
+  const [outOfStockTelecel, setOutOfStockTelecel] = useState(false)
+  const [outOfStockAT, setOutOfStockAT] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   // doc reference for site meta
   const siteMetaRef = doc(db, 'meta', 'site')
@@ -133,6 +137,9 @@ const Admin = () => {
           const data = snap.data() || {}
           setMaintenance(Boolean(data.maintenance))
           setMaintenanceMessage(data.message || '')
+          setOutOfStockMTN(Boolean(data.outOfStock_MTN))
+          setOutOfStockTelecel(Boolean(data.outOfStock_TELECEL))
+          setOutOfStockAT(Boolean(data.outOfStock_AT))
         }
       } catch (e) {
         console.warn('failed to load site meta', e)
@@ -164,8 +171,18 @@ const Admin = () => {
     setCurrentPage(1)
   }, [rows.length])
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
-  const paginatedRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const filteredRows = (function () {
+    const q = String(searchTerm || '').trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter(r => {
+      const email = String(r.email || '').toLowerCase()
+      const name = String(r.fullName || r.displayName || r.name || '').toLowerCase()
+      return email.includes(q) || name.includes(q)
+    })
+  })()
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+  const paginatedRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   const formatDate = (ts) => {
     if (!ts) return '-'
@@ -192,6 +209,7 @@ const Admin = () => {
   return (
     <div className="p-6 max-w-6xl mx-auto font-geom">
       <h2 className="text-2xl font-semibold mb-4">Admin Console</h2>
+      {/* search input moved below Bundle Availability */}
       {/* Maintenance toggle */}
       <div className="mb-6 p-4 border rounded bg-white">
         <h3 className="text-lg font-medium">Maintenance Mode</h3>
@@ -213,12 +231,53 @@ const Admin = () => {
           <input className="w-full sm:flex-1 px-2 py-1 border rounded text-sm" placeholder="Optional maintenance message" value={maintenanceMessage} onChange={(e) => setMaintenanceMessage(e.target.value)} />
           <button className="w-full sm:w-auto px-3 py-1 bg-sky-600 text-white rounded" onClick={async () => {
             try {
-              await setDoc(siteMetaRef, { maintenance, message: maintenanceMessage || '' }, { merge: true })
+              await setDoc(siteMetaRef, { maintenance, message: maintenanceMessage || '' , outOfStock_MTN: outOfStockMTN, outOfStock_TELECEL: outOfStockTelecel, outOfStock_AT: outOfStockAT }, { merge: true })
             } catch (err) {
               console.error('Failed to save maintenance message', err)
             }
           }}>Save</button>
         </div>
+      </div>
+      {/* Bundle stock toggles */}
+      <div className="mb-6 p-4 border rounded bg-white">
+        <h3 className="text-lg font-medium">Bundle Availability</h3>
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={outOfStockMTN} onChange={async (e) => {
+              const next = e.target.checked
+              setOutOfStockMTN(next)
+              try { await setDoc(siteMetaRef, { outOfStock_MTN: next }, { merge: true }) } catch (err) { console.error('Failed to update outOfStock MTN', err) }
+            }} />
+            <span className="text-sm">MTN bundles out of stock</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={outOfStockTelecel} onChange={async (e) => {
+              const next = e.target.checked
+              setOutOfStockTelecel(next)
+              try { await setDoc(siteMetaRef, { outOfStock_TELECEL: next }, { merge: true }) } catch (err) { console.error('Failed to update outOfStock Telecel', err) }
+            }} />
+            <span className="text-sm">Telecel bundles out of stock</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={outOfStockAT} onChange={async (e) => {
+              const next = e.target.checked
+              setOutOfStockAT(next)
+              try { await setDoc(siteMetaRef, { outOfStock_AT: next }, { merge: true }) } catch (err) { console.error('Failed to update outOfStock AT', err) }
+            }} />
+            <span className="text-sm">Airtel/Tigo bundles out of stock</span>
+          </label>
+        </div>
+      </div>
+      <div className="mb-4 mt-4">
+        <input
+          type="search"
+          placeholder="Search users by name or email"
+          value={searchTerm}
+          onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }}
+          className="w-full sm:max-w-md px-3 py-2 border rounded text-sm"
+        />
       </div>
       {/* Large screen: keep table layout */}
       <div className="hidden sm:block overflow-x-auto bg-white rounded-lg shadow-sm border">

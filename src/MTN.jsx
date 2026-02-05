@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { doc, onSnapshot } from 'firebase/firestore'
+import OutOfStockModal from './components/OutOfStockModal'
 import usePackages from './hooks/usePackages'
 import Spinner from './components/Spinner'
 import SkeletonGrid from './components/SkeletonGrid'
@@ -24,6 +26,7 @@ const localPrices = [4.7, 9.4, 13.9, 18.7, 23.9, 27.9,35.7,44.5,62.5,83,105,129,
 const MTN = () => {
   const { user } = useAuth()
   const [modalOpen, setModalOpen] = useState(false);
+  const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [phone, setPhone] = useState("");
   const { bundles, setBundles, loading, error } = usePackages('MTN', localPrices)
@@ -32,6 +35,20 @@ const MTN = () => {
   const [placing, setPlacing] = useState(false);
 
   // packages are loaded by usePackages hook; `loading` indicates whether API data is still loading
+
+  useEffect(() => {
+    // subscribe to site meta for out-of-stock flag for MTN
+    try {
+      const ref = doc(db, 'meta', 'site')
+      const unsub = onSnapshot(ref, (snap) => {
+        const data = snap.exists() ? snap.data() : {}
+        setOutOfStock(Boolean(data.outOfStock_MTN))
+      }, (err) => console.warn('site meta snapshot error', err))
+      return () => unsub()
+    } catch (e) {
+      // ignore
+    }
+  }, [])
 
   const handleBuy = async () => {
     const b = bundles[selectedIndex];
@@ -195,8 +212,8 @@ const MTN = () => {
         <div className="w-full max-w-4xl px-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
             {bundles.map((b, idx) => (
-              <div key={idx} className={'menu-item'} style={{ ['--delay']: `${idx * 60}ms` }} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }}>
-                <BundleCard b={b} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }} />
+              <div key={idx} className={'menu-item'} style={{ ['--delay']: `${idx * 60}ms` }} onClick={() => { setSelectedIndex(idx); if (outOfStock) setModalOpen(false); else setModalOpen(true) }}>
+                <BundleCard b={b} onClick={() => { setSelectedIndex(idx); if (outOfStock) setModalOpen(false); else setModalOpen(true) }} />
               </div>
             ))}
           </div>
@@ -254,6 +271,8 @@ const MTN = () => {
           </div>
         </div>
       )}
+
+      <OutOfStockModal open={outOfStock} onClose={() => { /* allow dismiss */ }} message="Bundle out of stock" />
 
         {successModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">

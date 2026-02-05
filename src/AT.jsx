@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import  { useState } from "react";
+import { doc, onSnapshot } from 'firebase/firestore'
+import OutOfStockModal from './components/OutOfStockModal'
 import usePackages from './hooks/usePackages'
 import Spinner from './components/Spinner'
 import SkeletonGrid from './components/SkeletonGrid'
@@ -25,6 +27,7 @@ const localPricesAT = [4.35, 8.95, 13.85, 17.70, 21.00,24.70,33.70,41.70,47.70,5
 const AT = () => {
   const { user } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
+  const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [phone, setPhone] = useState("")
   const { bundles, setBundles, loading, error } = usePackages('AT', localPricesAT)
@@ -173,6 +176,17 @@ const AT = () => {
       })
   }
 
+  useEffect(() => {
+    try {
+      const ref = doc(db, 'meta', 'site')
+      const unsub = onSnapshot(ref, (snap) => {
+        const data = snap.exists() ? snap.data() : {}
+        setOutOfStock(Boolean(data.outOfStock_AT))
+      }, (err) => console.warn('site meta snapshot error', err))
+      return () => unsub()
+    } catch (e) {}
+  }, [])
+
   return (
     <div>
       <Notice />
@@ -238,6 +252,7 @@ const AT = () => {
           </div>
         </div>
       )}
+      <OutOfStockModal open={outOfStock} onClose={() => {}} message="Bundle out of stock" />
 
           {successModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">

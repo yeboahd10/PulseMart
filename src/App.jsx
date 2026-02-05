@@ -12,6 +12,7 @@ import Telecel from './Telecel.jsx'
 import AT from './AT.jsx'
 import Admin from './Admin.jsx'
 import WhatsAppButton from './components/WhatsAppButton'
+import ShakingRobot from './components/ShakingRobot'
 import PaystackCallback from './PaystackCallback'
 import Maintenance from './components/Maintenance'
 import { useAuth } from './context/AuthContext'
@@ -67,6 +68,7 @@ function App() {
         <Route path="/paystack/callback" element={<PaystackCallback />} />
       </Routes>
       <WhatsAppButton phone="+233556665774" message="Hello! I need help with ...." />
+      <ShakingRobot />
       
     </div>
   )

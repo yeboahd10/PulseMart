@@ -31,9 +31,9 @@ const Maintenance = ({ enabled, message } = {}) => {
         aria-label="Site maintenance"
         className="w-full mx-4 sm:mx-0 max-w-md sm:max-w-xl bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6 sm:p-8 text-center"
       >
-        <h2 className="text-xl sm:text-2xl font-semibold mb-2">Site Under Maintenance</h2>
+        <h2 className="text-xl sm:text-2xl text-white font-semibold mb-2">Site Under Maintenance</h2>
         <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 leading-relaxed mb-4">{message || "We're currently performing scheduled maintenance. We'll be back shortly."}</p>
-        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">If you need urgent help, contact support or try again later.</p>
+        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">If you need urgent help, contact support on 0556665774  or try again later .</p>
       </div>
     </div>
   )

@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import  { useState } from "react";
+import { doc, onSnapshot } from 'firebase/firestore'
+import OutOfStockModal from './components/OutOfStockModal'
 import axios from "axios";
 import usePackages from './hooks/usePackages'
 import Spinner from './components/Spinner'
@@ -25,6 +27,7 @@ const localPricesTelecel = [25, 40, 48, 55, 68,85,100,120,137,157,174,195,360]
 const Telecel = () => {
   const { user } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
+  const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [phone, setPhone] = useState("")
   const { bundles, setBundles, loading, error } = usePackages('Telecel', localPricesTelecel)
@@ -158,6 +161,17 @@ const Telecel = () => {
       })
   }
 
+  useEffect(() => {
+    try {
+      const ref = doc(db, 'meta', 'site')
+      const unsub = onSnapshot(ref, (snap) => {
+        const data = snap.exists() ? snap.data() : {}
+        setOutOfStock(Boolean(data.outOfStock_TELECEL))
+      }, (err) => console.warn('site meta snapshot error', err))
+      return () => unsub()
+    } catch (e) {}
+  }, [])
+
   if (loading) {
     return (
       <div className="py-8">
@@ -181,8 +195,8 @@ const Telecel = () => {
         <div className="w-full max-w-4xl px-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
             {bundles.map((b, idx) => (
-              <div key={idx} className={'menu-item'} style={{ ['--delay']: `${idx * 60}ms` }} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }}>
-                <BundleCard b={b} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }} />
+              <div key={idx} className={'menu-item'} style={{ ['--delay']: `${idx * 60}ms` }} onClick={() => { setSelectedIndex(idx); if (outOfStock) setModalOpen(false); else setModalOpen(true) }}>
+                <BundleCard b={b} onClick={() => { setSelectedIndex(idx); if (outOfStock) setModalOpen(false); else setModalOpen(true) }} />
               </div>
             ))}
           </div>
@@ -240,6 +254,7 @@ const Telecel = () => {
           </div>
         </div>
       )}
+      <OutOfStockModal open={outOfStock} onClose={() => {}} message="Bundle out of stock" />
     
       {successModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
