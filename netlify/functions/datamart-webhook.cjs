@@ -1,7 +1,6 @@
 const JSON_HEADERS = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
 
-// Initialize firebase-admin if service account is available (no-op if not)
-const { admin, firestore } = require('./_shared/firebaseAdmin')
+// firebase-admin integration removed
 
 // Webhook has been removed — keep a no-op handler so incoming requests are acknowledged but not processed.
 exports.handler = async (event) => {
