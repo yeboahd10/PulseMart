@@ -326,12 +326,11 @@ const Dashboard = () => {
                           <TiTick className="text-green-600" size={40} />
                         </div>
                         <div className="text-lg font-semibold text-gray-900">Order placed successfully</div>
-                        {liveOrder ? (
-                          <div className="text-sm text-gray-700">
-                            <div>Transaction: <span className="font-mono">{(liveOrder.transactionReference || liveOrder.transaction_ref || liveOrder.reference || liveOrder.id) || '-'}</span></div>
-                            <div className="mt-1">Status: <span className="font-medium">{String(liveOrder.status || liveOrder.order_status || liveOrder.tx_status || 'pending')}</span></div>
-                          </div>
-                        ) : (liveOrderLoading ? <div className="text-sm text-gray-600">Loading order...</div> : <div className="text-sm text-gray-600">Order details will appear here shortly.</div>)}
+                        {liveOrderLoading ? (
+                          <div className="text-sm text-gray-600">Loading order...</div>
+                        ) : (
+                          <div className="text-sm text-gray-600">Order details will appear here shortly.</div>
+                        )}
                         <div className="w-full">
                           <button onClick={() => setSuccessModalOpen(false)} className="w-full mt-3 px-4 py-2 rounded-lg bg-blue-600 text-white">OK</button>
                         </div>
@@ -472,16 +471,24 @@ const Dashboard = () => {
                               <div className="text-[10px] text-sky-500">Status</div>
                               <div className="mt-1">
                                 {(() => {
-                                  // Use real-time status from Firestore (normalized earlier as `o.status`)
-                                  const raw = String(o.status || '').toLowerCase()
-                                  let s
-                                  if (raw === 'success' || raw === 'delivered') s = 'success'
-                                  else if (raw === 'processing' || raw === 'pending') s = raw
-                                  else if (raw) s = raw
-                                  else s = 'unknown'
+                                  // Time-based status derived from order timestamp:
+                                  // first 1 minute => pending, next 2 hours => processing, thereafter => delivered
+                                  let s = 'unknown'
+                                  try {
+                                    const createdAt = o.createdAt
+                                    if (createdAt) {
+                                      const ts = (createdAt instanceof Date) ? createdAt.getTime() : new Date(createdAt).getTime()
+                                      const age = Date.now() - ts
+                                      if (age < 1 * 60 * 1000) s = 'pending'
+                                      else if (age < 1 * 60 * 1000 + 2 * 60 * 60 * 1000) s = 'processing'
+                                      else s = 'success'
+                                    }
+                                  } catch (e) {
+                                    s = 'unknown'
+                                  }
 
-                                  const label = s === 'success' ? 'Delivered' : (s === 'processing' ? 'Processing' : (s === 'unknown' ? 'Unknown' : (s.charAt(0).toUpperCase() + s.slice(1))))
-                                  const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'processing' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800')
+                                  const label = s === 'success' ? 'Delivered' : (s === 'processing' ? 'Processing' : (s === 'pending' ? 'Pending' : 'Unknown'))
+                                  const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'processing' ? 'bg-blue-100 text-blue-800' : (s === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'))
                                   return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${badgeClass}`}>{label}</span>
                                 })()}
                               </div>

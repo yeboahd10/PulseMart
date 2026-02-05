@@ -195,8 +195,8 @@ const Admin = () => {
       {/* Maintenance toggle */}
       <div className="mb-6 p-4 border rounded bg-white">
         <h3 className="text-lg font-medium">Maintenance Mode</h3>
-        <div className="mt-2 flex items-center gap-3">
-          <label className="flex items-center gap-2">
+        <div className="mt-2 flex flex-col  items-start sm:items-center gap-3">
+          <label className="flex items-center gap-2 w-full sm:w-auto">
             <input type="checkbox" checked={maintenance} onChange={async (e) => {
               const next = e.target.checked
               setMaintenance(next)
@@ -210,8 +210,8 @@ const Admin = () => {
             }} />
             <span className="text-sm">Enable maintenance mode</span>
           </label>
-          <input className="flex-1 px-2 py-1 border rounded text-sm" placeholder="Optional maintenance message" value={maintenanceMessage} onChange={(e) => setMaintenanceMessage(e.target.value)} />
-          <button className="px-3 py-1 bg-sky-600 text-white rounded" onClick={async () => {
+          <input className="w-full sm:flex-1 px-2 py-1 border rounded text-sm" placeholder="Optional maintenance message" value={maintenanceMessage} onChange={(e) => setMaintenanceMessage(e.target.value)} />
+          <button className="w-full sm:w-auto px-3 py-1 bg-sky-600 text-white rounded" onClick={async () => {
             try {
               await setDoc(siteMetaRef, { maintenance, message: maintenanceMessage || '' }, { merge: true })
             } catch (err) {
