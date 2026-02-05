@@ -1,4 +1,5 @@
 
+import React from 'react'
 import './App.css'
 import { Routes, Route, Link } from 'react-router-dom'
 import Navbar from './Navbar'
@@ -12,9 +13,42 @@ import AT from './AT.jsx'
 import Admin from './Admin.jsx'
 import WhatsAppButton from './components/WhatsAppButton'
 import PaystackCallback from './PaystackCallback'
+import Maintenance from './components/Maintenance'
+import { useAuth } from './context/AuthContext'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from './firebase'
+
+const ADMIN_EMAIL = 'akwasiappiah@gmail.com'
 
 
 function App() {
+  const { user } = useAuth()
+  const [maintenance, setMaintenance] = React.useState(false)
+  const [maintenanceMessage, setMaintenanceMessage] = React.useState('')
+
+  React.useEffect(() => {
+    const ref = doc(db, 'meta', 'site')
+    const unsub = onSnapshot(ref, (snap) => {
+      if (!snap.exists()) {
+        setMaintenance(false)
+        setMaintenanceMessage('')
+        return
+      }
+      const data = snap.data() || {}
+      setMaintenance(Boolean(data.maintenance))
+      setMaintenanceMessage(data.message || '')
+    }, (err) => console.warn('site meta snapshot error', err))
+    return () => unsub()
+  }, [])
+
+  // If site is under maintenance and current user is NOT the admin, show maintenance UI only
+  if (maintenance && (!user || user?.email !== ADMIN_EMAIL)) {
+    return (
+      <div>
+        <Maintenance enabled={true} message={maintenanceMessage} />
+      </div>
+    )
+  }
 
 
   return (

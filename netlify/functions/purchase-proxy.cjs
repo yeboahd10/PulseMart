@@ -12,12 +12,10 @@ const CORS_HEADERS = {
 
 exports.handler = async (event) => {
   try {
-    // Handle preflight
     if (event.httpMethod === 'OPTIONS') {
       return { statusCode: 204, headers: CORS_HEADERS, body: '' }
     }
 
-    // Health check for GET (useful during netlify dev)
     if (event.httpMethod === 'GET') {
       return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify({ ok: true, function: 'purchase-proxy' }) }
     }
@@ -28,7 +26,6 @@ exports.handler = async (event) => {
 
     const body = event.body ? JSON.parse(event.body) : {}
 
-    // normalize and validate incoming purchase payload to match DataMart API expectations
     const normalizeNetwork = (net) => {
       if (!net) return net
       const s = String(net).toUpperCase()
@@ -38,12 +35,10 @@ exports.handler = async (event) => {
       return s
     }
 
-    // ensure required fields exist and are in the expected format
     const phoneNumber = body.phoneNumber || body.phone || body.msisdn || ''
     let network = body.network || body.net || ''
     let capacity = body.capacity || body.size || body.data || ''
 
-    // coerce capacity to numeric GB string (e.g. '5')
     capacity = String(capacity || '').replace(/[^0-9]/g, '')
     network = normalizeNetwork(network)
 
@@ -51,7 +46,6 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Missing required fields: phoneNumber, network, capacity' }) }
     }
 
-    // replace body fields with normalized values we will forward upstream
     body.phoneNumber = String(phoneNumber)
     body.network = network
     body.capacity = String(capacity)
@@ -63,7 +57,6 @@ exports.handler = async (event) => {
     const headers = { 'Content-Type': 'application/json' }
     if (secretApiKey) headers['X-API-Key'] = secretApiKey
 
-    // Diagnostic logging (avoid printing secrets)
     console.log('purchase-proxy: forwarding request', {
       method: event.httpMethod,
       path: event.path,
@@ -72,34 +65,30 @@ exports.handler = async (event) => {
       bodySample: typeof body === 'object' ? JSON.stringify(body).slice(0, 1000) : String(body)
     })
 
-    // If caller provided a Paystack transaction reference, verify it first and apply idempotency
     const paystackRef = String(body.paystackReference || body.reference || body.transactionReference || body.tx_ref || body.paymentReference || '').trim() || null
 
     if (paystackRef) {
-      // return cached response if recently processed in this instance
       const cached = processedRefs.get(paystackRef)
       if (cached && (Date.now() - cached.ts) < CACHE_TTL) {
         return { statusCode: cached.status || 200, headers: CORS_HEADERS, body: JSON.stringify(cached.response) }
       }
 
-      // verify with Paystack to ensure transaction succeeded
       try {
         const secret = (process.env.PAYSTACK_SECRET_KEY || process.env.API_PAYSTACK_SECRET_KEY || '')
         if (!secret) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'PAYSTACK_SECRET_KEY not configured' }) }
         if (String(secret).startsWith('pk_')) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Paystack public key detected; use secret key' }) }
 
-        const vresp = await axios.get(`https://api.paystack.co/transaction/verify/${encodeURIComponent(paystackRef)}`, {
-          headers: { Authorization: `Bearer ${String(secret).trim()}` },
+        const vresp = await axios.get('https://api.paystack.co/transaction/verify/' + encodeURIComponent(paystackRef), {
+          headers: { Authorization: 'Bearer ' + String(secret).trim() },
           timeout: 10000
         })
 
         const vdata = vresp.data && (vresp.data.data || vresp.data)
-        const status = vdata?.status || (vdata && vdata.data && vdata.data.status) || null
+        const status = vdata && (vdata.status || (vdata.data && vdata.data.status))
         if (!status || String(status).toLowerCase() !== 'success') {
           return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Paystack transaction not successful', detail: vdata }) }
         }
 
-        // Optionally validate expected amount if caller provided `amount`
         if (body.amount && vdata.amount) {
           const expectedKobo = Math.round(Number(body.amount) * 100)
           const received = Number(vdata.amount)
@@ -108,30 +97,25 @@ exports.handler = async (event) => {
           }
         }
 
-        // mark in-memory as in-progress to prevent immediate duplicates
         processedRefs.set(paystackRef, { ts: Date.now(), status: 202, response: { message: 'Processing purchase' } })
 
-        // attach idempotency header and transaction reference to upstream
         headers['Idempotency-Key'] = paystackRef
         body.transactionReference = paystackRef
 
         const resp = await axios.post(purchaseUrl, body, { headers, timeout: 15000 })
 
-        // cache successful response
         processedRefs.set(paystackRef, { ts: Date.now(), status: resp.status || 200, response: resp.data })
         console.log('purchase-proxy: upstream response', { status: resp.status })
         return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(resp.data) }
       } catch (err) {
-        // remove in-progress marker to allow retry
         processedRefs.delete(paystackRef)
         console.error('purchase-proxy paystack-verified error', err.message || err)
-        const status = err.response?.status || 500
-        const data = err.response?.data || { message: err.message }
+        const status = err.response && err.response.status || 500
+        const data = err.response && err.response.data || { message: err.message }
         return { statusCode: status, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase proxy failed', error: data }) }
       }
     }
 
-    // No paystack reference provided — just forward
     const resp = await axios.post(purchaseUrl, body, { headers, timeout: 15000 })
 
     console.log('purchase-proxy: upstream response', { status: resp.status })

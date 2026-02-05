@@ -16,6 +16,11 @@ const Admin = () => {
   const [editingId, setEditingId] = useState(null)
   const [editingValue, setEditingValue] = useState('')
   const [savingId, setSavingId] = useState(null)
+  const [maintenance, setMaintenance] = useState(false)
+  const [maintenanceMessage, setMaintenanceMessage] = useState('')
+
+  // doc reference for site meta
+  const siteMetaRef = doc(db, 'meta', 'site')
 
   useEffect(() => {
     if (!user || user?.email !== ADMIN_EMAIL) {
@@ -120,6 +125,20 @@ const Admin = () => {
 
     // initial load
     load()
+    // load maintenance state
+    const loadMaintenance = async () => {
+      try {
+        const snap = await getDoc(siteMetaRef)
+        if (snap.exists()) {
+          const data = snap.data() || {}
+          setMaintenance(Boolean(data.maintenance))
+          setMaintenanceMessage(data.message || '')
+        }
+      } catch (e) {
+        console.warn('failed to load site meta', e)
+      }
+    }
+    loadMaintenance()
 
     // reload when window/tab becomes active so latest transactions bubble to top
     const onFocus = () => {
@@ -173,6 +192,34 @@ const Admin = () => {
   return (
     <div className="p-6 max-w-6xl mx-auto font-geom">
       <h2 className="text-2xl font-semibold mb-4">Admin Console</h2>
+      {/* Maintenance toggle */}
+      <div className="mb-6 p-4 border rounded bg-white">
+        <h3 className="text-lg font-medium">Maintenance Mode</h3>
+        <div className="mt-2 flex items-center gap-3">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={maintenance} onChange={async (e) => {
+              const next = e.target.checked
+              setMaintenance(next)
+              try {
+                // Persist the maintenance flag and optional message to Firestore
+                // To change the persisted values manually, edit the document at `meta/site` in Firestore.
+                await setDoc(siteMetaRef, { maintenance: next, message: maintenanceMessage || '' }, { merge: true })
+              } catch (err) {
+                console.error('Failed to update maintenance flag', err)
+              }
+            }} />
+            <span className="text-sm">Enable maintenance mode</span>
+          </label>
+          <input className="flex-1 px-2 py-1 border rounded text-sm" placeholder="Optional maintenance message" value={maintenanceMessage} onChange={(e) => setMaintenanceMessage(e.target.value)} />
+          <button className="px-3 py-1 bg-sky-600 text-white rounded" onClick={async () => {
+            try {
+              await setDoc(siteMetaRef, { maintenance, message: maintenanceMessage || '' }, { merge: true })
+            } catch (err) {
+              console.error('Failed to save maintenance message', err)
+            }
+          }}>Save</button>
+        </div>
+      </div>
       {/* Large screen: keep table layout */}
       <div className="hidden sm:block overflow-x-auto bg-white rounded-lg shadow-sm border">
         <table className="min-w-full text-sm divide-y">

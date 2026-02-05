@@ -13,6 +13,7 @@ import { updateProfile } from 'firebase/auth'
 import PaymentModal from './components/PaymentModal'
 import BundleCardSimple from './components/BundleCardSimple.jsx'
 import Notice from './components/Notice'
+import useOrderSnapshot from './hooks/useOrderSnapshot'
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -31,10 +32,11 @@ const Dashboard = () => {
   const [copiedId, setCopiedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showAllOrders, setShowAllOrders] = useState(false)
-  const [now, setNow] = useState(Date.now())
+  
   const [searchParams, setSearchParams] = useSearchParams()
   const [successModalOpen, setSuccessModalOpen] = useState(false)
   const [successInfo, setSuccessInfo] = useState(null)
+  const { order: liveOrder, loading: liveOrderLoading } = useOrderSnapshot(successInfo?.purchaseId || null)
 
   useEffect(() => {
     if (!user) return
@@ -97,7 +99,7 @@ const Dashboard = () => {
   useEffect(() => {
     if (!user?.uid) { setOrders([]); return }
     try {
-      const purchasesRef = collection(db, 'purchases')
+    const purchasesRef = collection(db, 'purchases')
 
       const mapSnap = (snap) => snap.docs.map(d => {
         const data = d.data() || {}
@@ -108,7 +110,38 @@ const Dashboard = () => {
         const rawStatus = data.status || data.order_status || data.tx_status || data.orderStatus || data.order_status || data.txStatus || data.orderStatus ||
           data.rawResponse?.status || data.rawResponse?.data?.status || data.apiResponse?.status || data.data?.status ||
           data.raw?.status || data.raw?.data?.status || data.response?.status || data.message || ''
-        const normalizedStatus = String(rawStatus || '').trim().toLowerCase() || 'unknown'
+        let status = String(rawStatus || '').trim().toLowerCase() || ''
+
+        // Normalize createdAt into a Date if possible
+        let createdAtDate = null
+        if (data.createdAt) {
+          try {
+            if (typeof data.createdAt.toDate === 'function') createdAtDate = data.createdAt.toDate()
+            else if (typeof data.createdAt === 'number') createdAtDate = new Date(data.createdAt > 1e12 ? data.createdAt : data.createdAt * 1000)
+            else createdAtDate = new Date(data.createdAt)
+          } catch (e) {
+            createdAtDate = null
+          }
+        }
+
+        // Time-based display rules: first 1 minute -> pending; next 2 hours -> processing; then delivered
+        try {
+          if (createdAtDate) {
+            const age = Date.now() - createdAtDate.getTime()
+            if (status === 'success' || status === 'delivered') {
+              status = 'delivered'
+            } else {
+              if (age < 1 * 60 * 1000) status = 'pending'
+              else if (age < 1 * 60 * 1000 + 2 * 60 * 60 * 1000) status = 'processing'
+              else status = 'delivered'
+            }
+          } else {
+            if (!status) status = 'pending'
+          }
+        } catch (e) {
+          // fall back to raw status
+          if (!status) status = 'unknown'
+        }
 
         return {
           id: d.id,
@@ -117,8 +150,8 @@ const Dashboard = () => {
           dataAmount: data.capacity || data.size || data.bundle || '',
           price: displayPrice.toFixed(2),
           transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.reference || data.transactionId || data.txId || data.id || '',
-          status: normalizedStatus,
-          createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : null,
+          status: status || 'unknown',
+          createdAt: createdAtDate,
           raw: data
         }
       })
@@ -136,7 +169,8 @@ const Dashboard = () => {
         console.error('Purchases snapshot error', err)
         // if Firestore indicates a missing index, retry with a where-only query
         const msg = String(err?.message || '').toLowerCase()
-        if (msg.includes('index') || msg.includes('composite index') || msg.includes('requires an index')) {
+        // handle missing index or index-building errors by falling back to a where-only query
+        if (msg.includes('index') || msg.includes('composite index') || msg.includes('requires an index') || msg.includes('building')) {
           try {
             const fallbackQ = query(purchasesRef, where('userId', '==', user.uid))
             const unsubFallback = onSnapshot(fallbackQ, (snap) => {
@@ -172,11 +206,7 @@ const Dashboard = () => {
     setShowAllOrders(false)
   }, [orders.length])
 
-  // tick `now` so status labels update over time
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 10000)
-    return () => clearInterval(id)
-  }, [])
+  // status now comes from Firestore (real-time); no client timer required
 
   const hasChanges = () => {
     if (!user) return false
@@ -296,7 +326,12 @@ const Dashboard = () => {
                           <TiTick className="text-green-600" size={40} />
                         </div>
                         <div className="text-lg font-semibold text-gray-900">Order placed successfully</div>
-                        {/* no order id shown here — intentionally omitted to match MTN modal */}
+                        {liveOrder ? (
+                          <div className="text-sm text-gray-700">
+                            <div>Transaction: <span className="font-mono">{(liveOrder.transactionReference || liveOrder.transaction_ref || liveOrder.reference || liveOrder.id) || '-'}</span></div>
+                            <div className="mt-1">Status: <span className="font-medium">{String(liveOrder.status || liveOrder.order_status || liveOrder.tx_status || 'pending')}</span></div>
+                          </div>
+                        ) : (liveOrderLoading ? <div className="text-sm text-gray-600">Loading order...</div> : <div className="text-sm text-gray-600">Order details will appear here shortly.</div>)}
                         <div className="w-full">
                           <button onClick={() => setSuccessModalOpen(false)} className="w-full mt-3 px-4 py-2 rounded-lg bg-blue-600 text-white">OK</button>
                         </div>
@@ -437,18 +472,13 @@ const Dashboard = () => {
                               <div className="text-[10px] text-sky-500">Status</div>
                               <div className="mt-1">
                                 {(() => {
-                                  const createdTs = o.createdAt ? (o.createdAt.getTime ? o.createdAt.getTime() : new Date(o.createdAt).getTime()) : null
+                                  // Use real-time status from Firestore (normalized earlier as `o.status`)
+                                  const raw = String(o.status || '').toLowerCase()
                                   let s
-                                  // Prefer timestamp when available: <2 hours => Processing, otherwise Delivered
-                                  if (createdTs) {
-                                    const diffHours = (now - createdTs) / 3600000
-                                    s = diffHours < 2 ? 'processing' : 'success'
-                                  } else {
-                                    const raw = String(o.status || '').toLowerCase()
-                                    if (raw === 'success' || raw === 'delivered') s = 'success'
-                                    else if (raw === 'processing' || raw === 'pending') s = raw
-                                    else s = 'unknown'
-                                  }
+                                  if (raw === 'success' || raw === 'delivered') s = 'success'
+                                  else if (raw === 'processing' || raw === 'pending') s = raw
+                                  else if (raw) s = raw
+                                  else s = 'unknown'
 
                                   const label = s === 'success' ? 'Delivered' : (s === 'processing' ? 'Processing' : (s === 'unknown' ? 'Unknown' : (s.charAt(0).toUpperCase() + s.slice(1))))
                                   const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'processing' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800')
