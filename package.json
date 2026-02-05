@@ -19,7 +19,6 @@
     "dotenv": "^17.2.3",
     "express": "^4.22.1",
     "firebase": "^12.7.0",
-    "firebase-admin": "^13.6.0",
     "jsonwebtoken": "^9.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

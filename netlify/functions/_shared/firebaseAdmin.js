@@ -11,7 +11,13 @@ try {
     const saPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
     let serviceAccount = null
 
-    if (saPath) {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      try {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
+      } catch (err) {
+        serviceAccount = null
+      }
+    } else if (saPath) {
       const resolved = path.resolve(process.cwd(), saPath)
       try {
         serviceAccount = JSON.parse(fs.readFileSync(resolved, 'utf8'))
@@ -20,20 +26,12 @@ try {
       }
     }
 
-    // fallback to repo-root file name if present
-    if (!serviceAccount) {
-      const fallback = path.resolve(process.cwd(), 'pulsemart-1d11e-firebase-adminsdk-fbsvc-11c2793397.json')
-      if (fs.existsSync(fallback)) {
-        serviceAccount = JSON.parse(fs.readFileSync(fallback, 'utf8'))
-      }
-    }
-
     if (serviceAccount) {
       adminLib.initializeApp({ credential: adminLib.credential.cert(serviceAccount) })
       firestore = adminLib.firestore()
-      console.log('firebase-admin initialized using service account')
+      console.log('firebase-admin initialized using provided service account')
     } else {
-      console.log('FIREBASE_SERVICE_ACCOUNT_PATH not set or file not found — firebase-admin not initialized')
+      console.log('No service account provided — firebase-admin not initialized (local file fallback removed)')
     }
   } else {
     firestore = adminLib.firestore()

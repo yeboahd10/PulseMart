@@ -48,3 +48,6 @@ dist-ssr
 
 # Local Netlify folder
 .netlify
+
+# Service account key - do not commit
+pulsemart-1d11e-firebase-adminsdk-fbsvc-11c2793397.json
