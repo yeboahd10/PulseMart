@@ -80,7 +80,7 @@ const Dashboard = () => {
   }, [searchParams, setSearchParams])
 
   const items = [
-    { id: "wallet", icon: <FaWallet size="1.5em" />, label: "Wallet" },
+    { id: "wallet", icon: <FaWallet size="1.5em" />, label: "Wallet & Stats" },
     {
       id: "orders",
       icon: <FaCartPlus size="1.5em" />,
@@ -99,20 +99,17 @@ const Dashboard = () => {
   useEffect(() => {
     if (!user?.uid) { setOrders([]); return }
     try {
-    const purchasesRef = collection(db, 'purchases')
+      const purchasesRef = collection(db, 'purchases')
 
       const mapSnap = (snap) => snap.docs.map(d => {
         const data = d.data() || {}
-        // Prefer display/local price fields when available; fall back to API price/amount
         const rawPrice = data.displayPrice ?? data.display_price ?? data.uiPrice ?? data.localPrice ?? data.price ?? data.amount ?? 0
         const displayPrice = Number(rawPrice || 0)
-        // derive status from multiple possible locations (top-level, nested provider responses, etc.)
         const rawStatus = data.status || data.order_status || data.tx_status || data.orderStatus || data.order_status || data.txStatus || data.orderStatus ||
           data.rawResponse?.status || data.rawResponse?.data?.status || data.apiResponse?.status || data.data?.status ||
           data.raw?.status || data.raw?.data?.status || data.response?.status || data.message || ''
         let status = String(rawStatus || '').trim().toLowerCase() || ''
 
-        // Normalize createdAt into a Date if possible
         let createdAtDate = null
         if (data.createdAt) {
           try {
@@ -124,7 +121,6 @@ const Dashboard = () => {
           }
         }
 
-        // Time-based display rules: first 1 minute -> pending; next 2 hours -> processing; then delivered
         try {
           if (createdAtDate) {
             const age = Date.now() - createdAtDate.getTime()
@@ -139,7 +135,6 @@ const Dashboard = () => {
             if (!status) status = 'pending'
           }
         } catch (e) {
-          // fall back to raw status
           if (!status) status = 'unknown'
         }
 
@@ -158,7 +153,6 @@ const Dashboard = () => {
 
       const subscribe = (q) => onSnapshot(q, (snap) => {
         let items = mapSnap(snap)
-        // ensure latest-first ordering client-side as well
         items = items.sort((a,b) => {
           const ta = a.createdAt ? a.createdAt.getTime() : 0
           const tb = b.createdAt ? b.createdAt.getTime() : 0
@@ -167,9 +161,7 @@ const Dashboard = () => {
         setOrders(items)
       }, (err) => {
         console.error('Purchases snapshot error', err)
-        // if Firestore indicates a missing index, retry with a where-only query
         const msg = String(err?.message || '').toLowerCase()
-        // handle missing index or index-building errors by falling back to a where-only query
         if (msg.includes('index') || msg.includes('composite index') || msg.includes('requires an index') || msg.includes('building')) {
           try {
             const fallbackQ = query(purchasesRef, where('userId', '==', user.uid))
@@ -182,7 +174,6 @@ const Dashboard = () => {
               })
               setOrders(items)
             }, (err2) => console.error('Purchases fallback snapshot error', err2))
-            // return fallback unsub when original subscribes fails
             return unsubFallback
           } catch (e) {
             console.error('Failed to subscribe fallback purchases query', e)
@@ -190,7 +181,6 @@ const Dashboard = () => {
         }
       })
 
-      // try primary ordered query first
       const q = query(purchasesRef, where('userId', '==', user.uid), orderBy('createdAt', 'desc'))
       const unsub = subscribe(q)
       return () => unsub()
@@ -200,13 +190,10 @@ const Dashboard = () => {
     }
   }, [user])
 
-  // reset pagination when orders change
   useEffect(() => {
     setCurrentPage(1)
     setShowAllOrders(false)
   }, [orders.length])
-
-  // status now comes from Firestore (real-time); no client timer required
 
   const hasChanges = () => {
     if (!user) return false
@@ -215,7 +202,6 @@ const Dashboard = () => {
     return (String(profileFullName || '') !== String(originalName || '')) || (String(profilePhone || '') !== String(originalPhone || ''))
   }
 
-  // helper to truncate long transaction ids
   const truncate = (tx = '') => {
     const s = String(tx || '')
     if (s.length <= 18) return s
@@ -282,65 +268,100 @@ const Dashboard = () => {
           })}
         </ul>
       </div>
+
       <div>
         {selected === "wallet" && (
           <div>
-            <div className="m-3 p-3 sm:p-5 rounded-box shadow-md bg-blue-500 text-white">
-              <div className="flex flex-col">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <p className="text-sm sm:text-base">Available Balance</p>
-                    <h2 className="text-2xl sm:text-4xl font-bold">
-                      <FaCediSign className="inline mr-1 text-xl sm:text-3xl" />
-                      {(Number(availableBalance || 0)).toFixed(2)}
-                    </h2>
-                  </div>
-                  <div>
-                    <FaWallet className="ml-6 text-2xl sm:ml-10 sm:text-3xl md:text-4xl text-white" />
-                  </div>
-                </div>
+            {/* Merged Balance Stats + Wallet UI */}
+            <div className="m-3 p-4 rounded-box shadow-md bg-white">
+              {/* Top row: current balance + Top Up */}
+              {(() => {
+                const now = new Date()
+                const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-                <hr />
-                <div className="text-center mt-2 mb-3">
-                  <p className="text-xs sm:text-sm">Your balance is available for use</p>
-                </div>
+                let todayOrders = 0
+                let todaySpent = 0
+                let monthOrders = 0
+                let monthSpent = 0
+                let completed = 0
+                let pending = 0
+                let failed = 0
+                let allSpent = 0
 
-                <div>
-                  <button
-                    onClick={() => setShowPayModal(true)}
-                    aria-label="Add funds"
-                    className="mx-auto block w-44 sm:w-full max-w-xs px-4 py-2 rounded-lg bg-white/20 text-white font-semibold shadow-sm hover:shadow-md transition-all border border-white/20 text-center"
-                  >
-                    Add Funds
-                  </button>
-                </div>
-                 <div className="text-center rounded-xl mt-2 justify-center items-center">
-                  <p className="text-xs sm:text-sm mt-3"><FaLock className="inline-block mr-2" />Payment is secured by Paystack</p>
-                 </div>
-                {successModalOpen && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-                    <div className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl shadow-2xl w-11/12 max-w-sm p-6 text-center">
-                      <button onClick={() => setSuccessModalOpen(false)} className="absolute right-4 top-4 text-gray-700">✕</button>
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="rounded-full bg-green-100 p-4">
-                          <TiTick className="text-green-600" size={40} />
+                orders.forEach((o) => {
+                  const created = o.createdAt instanceof Date ? o.createdAt : (o.createdAt ? new Date(o.createdAt) : null)
+                  const price = Number(o.price || 0)
+                  allSpent += isNaN(price) ? 0 : price
+
+                  if (created) {
+                    if (created >= startOfToday) {
+                      todayOrders += 1
+                      todaySpent += isNaN(price) ? 0 : price
+                    }
+                    if (created >= startOfMonth) {
+                      monthOrders += 1
+                      monthSpent += isNaN(price) ? 0 : price
+                    }
+                  }
+
+                  const st = String(o.status || '').toLowerCase()
+                  if (st === 'delivered' || st === 'success') completed += 1
+                  else if (st === 'pending' || st === 'processing') pending += 1
+                  else if (st === 'failed' || st === 'error') failed += 1
+                })
+
+                const allOrders = orders.length
+                const currentBalance = Number(availableBalance ?? 0)
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 bg-white">
+                      <div>
+                        <div className="text-sm text-slate-500">Current Balance</div>
+                        <div className="flex items-baseline gap-2">
+                          <div className="text-lg sm:text-3xl font-bold text-emerald-600">GHS</div>
+                          <div className="text-2xl sm:text-4xl font-extrabold">{currentBalance.toFixed(2)}</div>
                         </div>
-                        <div className="text-lg font-semibold text-gray-900">Order placed successfully</div>
-                        {liveOrderLoading ? (
-                          <div className="text-sm text-gray-600">Loading order...</div>
-                        ) : (
-                          <div className="text-sm text-gray-600">Order details will appear here shortly.</div>
-                        )}
-                        <div className="w-full">
-                          <button onClick={() => setSuccessModalOpen(false)} className="w-full mt-3 px-4 py-2 rounded-lg bg-blue-600 text-white">OK</button>
-                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setShowPayModal(true)}
+                          className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm sm:text-base font-semibold"
+                        >Top Up</button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-3 sm:p-4 rounded-lg border border-slate-200 bg-white">
+                        <div className="text-xs sm:text-sm text-slate-500">Today</div>
+                        <div className="mt-2 font-semibold text-lg">{todayOrders} orders</div>
+                        <div className="text-xs sm:text-sm text-slate-400">GHS {todaySpent.toFixed(2)} spent</div>
+                      </div>
+                      <div className="p-3 sm:p-4 rounded-lg border border-slate-200 bg-white">
+                        <div className="text-xs sm:text-sm text-slate-500">This Month</div>
+                        <div className="mt-2 font-semibold text-lg">{monthOrders} orders</div>
+                        <div className="text-xs sm:text-sm text-slate-400">GHS {monthSpent.toFixed(2)} spent</div>
+                      </div>
+                      <div className="p-3 sm:p-4 rounded-lg border border-slate-200 bg-white">
+                        <div className="text-xs sm:text-sm text-slate-500">All Time</div>
+                        <div className="mt-2 font-semibold text-lg">{allOrders} orders</div>
+                        <div className="text-xs sm:text-sm text-slate-400">GHS {allSpent.toFixed(2)} spent</div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 sm:p-4 rounded-lg border border-slate-200 bg-white">
+                      <div className="text-xs sm:text-sm text-slate-600 font-semibold mb-3">Order Status Breakdown</div>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                        <div className="px-2 py-1 text-xs rounded-full bg-green-50 text-green-700">Completed: {completed}</div>
+                        <div className="px-2 py-1 text-xs rounded-full bg-yellow-50 text-yellow-700">Pending: {pending}</div>
+                        <div className="px-2 py-1 text-xs rounded-full bg-red-50 text-red-700">Failed: {failed}</div>
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-            <div className="flex justify-center items-center">
+                )
+              })()}
             </div>
 
             <div className="m-3">
@@ -471,8 +492,6 @@ const Dashboard = () => {
                               <div className="text-[10px] text-sky-500">Status</div>
                               <div className="mt-1">
                                 {(() => {
-                                  // Time-based status derived from order timestamp:
-                                  // first 1 minute => pending, next 2 hours => processing, thereafter => delivered
                                   let s = 'unknown'
                                   try {
                                     const createdAt = o.createdAt
@@ -525,7 +544,6 @@ const Dashboard = () => {
                 )
               })()}
 
-              {/* pagination controls */}
               {(() => {
                 const q2 = String(filterQuery || '').trim().toLowerCase()
                 const filtered2 = orders.filter((o) => {
@@ -644,7 +662,6 @@ const Dashboard = () => {
 
                       await setDoc(doc(db, 'users', user.uid), updates, { merge: true })
 
-                      // try updating Firebase Auth displayName when name changed
                       if (updates.fullName && auth?.currentUser) {
                         try {
                           await updateProfile(auth.currentUser, { displayName: updates.fullName })

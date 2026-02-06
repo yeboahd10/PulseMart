@@ -31,7 +31,7 @@ const ShakingRobot = () => {
         .robot-root { position: fixed; left: 12px; top: 50%; transform: translateY(-50%); z-index: 9999; pointer-events: none; }
         .robot-wrap { display: flex; align-items: center; gap: 10px; }
         .robot { width: 74px; height: 74px; display: flex; align-items: center; justify-content: center; position: relative; }
-        .robot-caption { margin-top: 6px; text-align: center; font-size: 12px; color: #7f1d1d; font-weight: 600; pointer-events: none; }
+        .robot-caption { margin-top: 1px; text-align: center; font-size: 12px; color: #7f1d1d; font-weight: 600; pointer-events: none; }
         .robot-link { pointer-events: auto; cursor: pointer; display: flex; align-items: center; text-decoration: none; }
 
         @keyframes shake {
