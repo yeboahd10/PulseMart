@@ -3,7 +3,7 @@ import { TiWarning } from 'react-icons/ti'
 
 const PERM_KEY = 'noticeDismissedForever'
 const EXPIRY_KEY = 'noticeDismissExpiry'
-const DEFAULT_NOTICE = 'Now Customers can chat with our live agents in realtime and get immediate assistance.'
+const DEFAULT_NOTICE = 'Due to validation issues, orders may take longer than expected.Now Customers can chat with our live agents in realtime and get immediate assistance.'
 
 const Notice = () => {
   const [open, setOpen] = useState(false)
@@ -11,6 +11,8 @@ const Notice = () => {
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
+        const force = window.location?.search?.includes('forceNotice=1')
+        if (force && import.meta.env.DEV) { setOpen(true); return }
         const perm = localStorage.getItem(PERM_KEY)
         if (perm === '1') { setOpen(false); return }
         const expiry = Number(localStorage.getItem(EXPIRY_KEY)) || 0
@@ -54,9 +56,9 @@ const Notice = () => {
             <TiWarning className="text-sky-600" size={36} />
           </div>
           <div className="text-2xl font-bold">IMPORTANT NOTICE</div>
-          <div className="text-sm text-gray-700">{DEFAULT_NOTICE}</div>
+          <div className="text-sm text-gray-700 font-Geom">{DEFAULT_NOTICE}</div>
           <div className="w-full flex flex-col gap-2">
-            <button onClick={dismissForDay} className="w-full mt-2 px-4 py-2 rounded-lg bg-gray-200 text-gray-800">Dismiss for a day</button>
+            <button onClick={dismissForDay} className="w-full mt-2 px-4 py-2 rounded-lg bg-gray-200 text-gray-800">I've Read,Dismiss </button>
             <button onClick={dismissForever} className="w-full px-4 py-2 rounded-lg bg-black text-white">Dismiss forever</button>
           </div>
         </div>
