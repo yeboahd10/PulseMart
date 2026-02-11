@@ -240,21 +240,7 @@ const Admin = () => {
           }}>Save</button>
         </div>
       </div>
-    {/* Site notice editor */}
-    <div className="mb-6 p-4 border rounded bg-white">
-      <h3 className="text-lg font-medium">Site Notice</h3>
-      <div className="mt-2">
-        <textarea className="w-full px-2 py-2 border rounded text-sm" rows={4} placeholder="Notice message shown to users" value={noticeMessage} onChange={(e) => setNoticeMessage(e.target.value)} />
-        <div className="mt-2 flex gap-2">
-          <button className="px-3 py-1 bg-sky-600 text-white rounded" onClick={async () => {
-            try {
-              await setDoc(siteMetaRef, { notice: noticeMessage || '' }, { merge: true })
-            } catch (err) { console.error('Failed to save site notice', err) }
-          }}>Save Notice</button>
-          <button className="px-3 py-1 border rounded" onClick={() => setNoticeMessage('')}>Clear</button>
-        </div>
-      </div>
-    </div>
+    {/* Site notice is managed by code; editor removed per request */}
       {/* Bundle stock toggles */}
       <div className="mb-6 p-4 border rounded bg-white">
         <h3 className="text-lg font-medium">Bundle Availability</h3>
