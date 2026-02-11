@@ -37,9 +37,9 @@ const WhatsAppButton = ({ message = '', channel = 'https://whatsapp.com/channel/
 
   const wrapperStyle = {
     position: 'fixed',
-    right: 5,
-    bottom: 20,
-    zIndex: 1000,
+    right: 2,
+    bottom: 92,
+    zIndex: 2147483647,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center'
@@ -81,7 +81,7 @@ const WhatsAppButton = ({ message = '', channel = 'https://whatsapp.com/channel/
     <div style={wrapperStyle}>
       {/* injected styles for ping and shake animations */}
       <style>{`
-        .wa-ping{ position:absolute; width:78px; height:78px; left:50%; top:50%; transform:translate(-50%,-50%); border-radius:50%; background:rgba(37,211,102,0.18); z-index:998; pointer-events:none; animation:wa-ping 0.9s cubic-bezier(.4,0,.2,1) infinite; }
+        .wa-ping{ position:absolute; width:78px; height:78px; left:50%; top:50%; transform:translate(-50%,-50%); border-radius:50%; background:rgba(37,211,102,0.18); z-index:2147483646; pointer-events:none; animation:wa-ping 0.9s cubic-bezier(.4,0,.2,1) infinite; }
         .wa-hidden{ display:none !important }
         .wa-btn{ position:relative; z-index:999; transition:transform 160ms ease; }
         .wa-btn.shake{ animation:wa-shake 600ms ease-in-out; }

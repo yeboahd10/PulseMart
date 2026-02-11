@@ -219,6 +219,7 @@ const Navbar = () => {
                   </span>
                   <span className='flex-1 text-sm font-medium text-gray-800'>Logout</span>
                 </button>
+                
               </>
             ) : (
               <>

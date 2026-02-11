@@ -22,6 +22,7 @@ const Admin = () => {
   const [outOfStockTelecel, setOutOfStockTelecel] = useState(false)
   const [outOfStockAT, setOutOfStockAT] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [noticeMessage, setNoticeMessage] = useState('')
 
   // doc reference for site meta
   const siteMetaRef = doc(db, 'meta', 'site')
@@ -137,6 +138,7 @@ const Admin = () => {
           const data = snap.data() || {}
           setMaintenance(Boolean(data.maintenance))
           setMaintenanceMessage(data.message || '')
+          setNoticeMessage(data.notice || data.noticeMessage || '')
           setOutOfStockMTN(Boolean(data.outOfStock_MTN))
           setOutOfStockTelecel(Boolean(data.outOfStock_TELECEL))
           setOutOfStockAT(Boolean(data.outOfStock_AT))
@@ -231,13 +233,28 @@ const Admin = () => {
           <input className="w-full sm:flex-1 px-2 py-1 border rounded text-sm" placeholder="Optional maintenance message" value={maintenanceMessage} onChange={(e) => setMaintenanceMessage(e.target.value)} />
           <button className="w-full sm:w-auto px-3 py-1 bg-sky-600 text-white rounded" onClick={async () => {
             try {
-              await setDoc(siteMetaRef, { maintenance, message: maintenanceMessage || '' , outOfStock_MTN: outOfStockMTN, outOfStock_TELECEL: outOfStockTelecel, outOfStock_AT: outOfStockAT }, { merge: true })
+              await setDoc(siteMetaRef, { maintenance, message: maintenanceMessage || '' , notice: noticeMessage || '', outOfStock_MTN: outOfStockMTN, outOfStock_TELECEL: outOfStockTelecel, outOfStock_AT: outOfStockAT }, { merge: true })
             } catch (err) {
               console.error('Failed to save maintenance message', err)
             }
           }}>Save</button>
         </div>
       </div>
+    {/* Site notice editor */}
+    <div className="mb-6 p-4 border rounded bg-white">
+      <h3 className="text-lg font-medium">Site Notice</h3>
+      <div className="mt-2">
+        <textarea className="w-full px-2 py-2 border rounded text-sm" rows={4} placeholder="Notice message shown to users" value={noticeMessage} onChange={(e) => setNoticeMessage(e.target.value)} />
+        <div className="mt-2 flex gap-2">
+          <button className="px-3 py-1 bg-sky-600 text-white rounded" onClick={async () => {
+            try {
+              await setDoc(siteMetaRef, { notice: noticeMessage || '' }, { merge: true })
+            } catch (err) { console.error('Failed to save site notice', err) }
+          }}>Save Notice</button>
+          <button className="px-3 py-1 border rounded" onClick={() => setNoticeMessage('')}>Clear</button>
+        </div>
+      </div>
+    </div>
       {/* Bundle stock toggles */}
       <div className="mb-6 p-4 border rounded bg-white">
         <h3 className="text-lg font-medium">Bundle Availability</h3>

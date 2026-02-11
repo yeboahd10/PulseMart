@@ -1,72 +1,63 @@
-import React, { useEffect } from "react";
-import  { useState } from "react";
-import { doc, onSnapshot } from 'firebase/firestore'
-import OutOfStockModal from './components/OutOfStockModal'
+import React, { useState, useEffect } from 'react'
+import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef } from 'firebase/firestore'
+import { db } from './firebase'
+import { useAuth } from './context/AuthContext'
 import usePackages from './hooks/usePackages'
 import Spinner from './components/Spinner'
 import SkeletonGrid from './components/SkeletonGrid'
 import BundleCard from './components/BundleCard'
 import Notice from './components/Notice'
-import axios from "axios";
-import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef } from 'firebase/firestore'
-import { db } from './firebase'
-import { useAuth } from './context/AuthContext'
-import { FaCediSign, FaPhone, FaRegCopyright } from "react-icons/fa6";
+import axios from 'axios'
 import { TiTick } from 'react-icons/ti'
-import { Link } from "react-router-dom";
+import { FaCediSign, FaRegCopyright } from 'react-icons/fa6'
 import { mapNetwork } from './utils/network'
 
-// module-scope env and prices
-const apiUrlAT = import.meta.env.VITE_API_BASE_AT_PREMIUM
 const apiKey = import.meta.env.VITE_API_KEY
 const purchaseUrl = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
   ? '/.netlify/functions/purchase-proxy'
   : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy')
-const localPricesAT = [4.35, 8.95, 13.85, 17.70, 21.00,24.70,33.70,41.70,47.70,57.70,95.20,115.20,151.20,190.20]
+
+const localPricesAT = [4.35, 8.95, 13.85, 17.7, 21.0, 24.7, 33.7, 41.7, 47.7, 57.7, 95.2, 115.2, 151.2, 190.2]
 
 const AT = () => {
   const { user } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
-  const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [phone, setPhone] = useState("")
+  const [phone, setPhone] = useState('')
   const { bundles, setBundles, loading, error } = usePackages('AT', localPricesAT)
   const [successModalOpen, setSuccessModalOpen] = useState(false)
   const [successInfo, setSuccessInfo] = useState(null)
-  // usePackages hook will fetch API data and set `bundles`; `loading` indicates API fetch state
+  const [placing, setPlacing] = useState(false)
 
-  if (loading) {
-    return (
-      <div className="py-8">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="flex items-center justify-center mb-6"><Spinner label="Loading bundles..." /></div>
-          <SkeletonGrid columns={3} count={6} />
-        </div>
-      </div>
-    )
-  }
+  useEffect(() => {
+    // placeholder for any AT-specific subscriptions if needed
+  }, [])
 
   const handleBuy = async () => {
     const b = bundles[selectedIndex]
     if (!b) return
+    setPlacing(true)
     if (!phone) {
       alert('Please enter a phone number')
+      setPlacing(false)
       return
     }
     if (!purchaseUrl) {
       alert('Purchase URL not configured')
+      setPlacing(false)
       return
     }
 
     const displayPrice = Number(b.price) || 0
     const userBalance = Number(user?.balance ?? user?.wallet ?? 0)
-    // if user's balance is less than UI display price, initialize Paystack for the shortfall
+
     if (user && userBalance < displayPrice) {
       const shortfall = Number((displayPrice - userBalance).toFixed(2))
       const fee = Number((shortfall * 0.02).toFixed(2))
       const total = Number((shortfall + fee).toFixed(2))
       if (!user.email) {
         alert('Please ensure your account has an email before paying')
+        setPlacing(false)
         return
       }
 
@@ -75,16 +66,7 @@ const AT = () => {
         amount: total,
         email: user.email,
         callback_url: `${window.location.origin}/paystack/callback`,
-        metadata: {
-          purchase: {
-            phoneNumber: phone,
-            network: mapNetwork(b.network),
-            capacity: capacity,
-            displayPrice: displayPrice,
-            shortfall,
-            fee
-          }
-        }
+        metadata: { purchase: { phoneNumber: phone, network: mapNetwork(b.network), capacity, displayPrice, shortfall, fee } }
       }
 
       try {
@@ -94,33 +76,25 @@ const AT = () => {
         alert(`Payment initialization failed: ${err.response?.data?.message || err.message}`)
       }
 
+      setPlacing(false)
       return
     }
 
     const actualPrice = b.apiPrice ?? null
     if (!actualPrice) {
       alert('Cannot purchase: price not available from API for this bundle')
+      setPlacing(false)
       return
     }
 
     const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
 
-    const payload = {
-      phoneNumber: phone,
-      network: mapNetwork(b.network),
-      capacity: capacity,
-      gateway: 'wallet'
-    };
-
+    const payload = { phoneNumber: phone, network: mapNetwork(b.network), capacity, gateway: 'wallet' }
     const headers = { 'Content-Type': 'application/json' }
     if (apiKey) headers['X-API-Key'] = apiKey
 
-    // log payload and context for debugging
-    console.log('AT purchase payload:', payload, 'headers:', headers, 'user:', { id: user?.uid, email: user?.email, balance: user?.balance }, 'bundle:', b)
-
     axios.post(purchaseUrl, payload, { headers })
       .then(async (res) => {
-        console.log('Purchase response:', res.data)
         const resp = res.data || {}
         const success = resp?.status === 'success' || resp?.success === true || resp?.order_status === 'success' || resp?.data?.status === 'success'
         if (success) {
@@ -129,7 +103,6 @@ const AT = () => {
           setSuccessInfo({ purchaseId, transactionReference })
           setSuccessModalOpen(true)
           try {
-            // save purchase
             await addDoc(collection(db, 'purchases'), {
               userId: user?.uid ?? null,
               purchaseId,
@@ -138,7 +111,6 @@ const AT = () => {
               network: b.network,
               phoneNumber: phone,
               capacity: b.dataAmount,
-              // persist UI/local price fields in addition to API price
               price: actualPrice,
               displayPrice: Number(b.price) || 0,
               display_price: Number(b.price) || 0,
@@ -146,18 +118,14 @@ const AT = () => {
               createdAt: serverTimestamp(),
             })
 
-            // deduct UI display price from user's balance
             if (user?.uid) {
               const userDocRef = docRef(db, 'users', user.uid)
               const displayPrice = Number(b.price) || 0
               await runTransaction(db, async (tx) => {
                 const snap = await tx.get(userDocRef)
                 const current = Number(snap.exists() ? (snap.data().balance ?? snap.data().wallet ?? 0) : 0)
-                if (current < displayPrice) {
-                  throw new Error('Insufficient balance')
-                }
-                const newBal = current - displayPrice
-                tx.update(userDocRef, { balance: newBal })
+                if (current < displayPrice) throw new Error('Insufficient balance')
+                tx.update(userDocRef, { balance: current - displayPrice })
               })
             }
           } catch (err) {
@@ -167,25 +135,24 @@ const AT = () => {
           alert('Purchase request submitted but not successful — check response')
         }
         setModalOpen(false)
+        setPlacing(false)
       })
       .catch((err) => {
         console.error('Purchase error:', err)
-        console.error('Purchase error response body:', err.response?.data)
+        setPlacing(false)
         const serverMsg = err.response?.data?.message || err.response?.data || err.message
         alert(`Purchase failed: ${typeof serverMsg === 'string' ? serverMsg : JSON.stringify(serverMsg)}`)
       })
   }
 
-  useEffect(() => {
-    try {
-      const ref = doc(db, 'meta', 'site')
-      const unsub = onSnapshot(ref, (snap) => {
-        const data = snap.exists() ? snap.data() : {}
-        setOutOfStock(Boolean(data.outOfStock_AT))
-      }, (err) => console.warn('site meta snapshot error', err))
-      return () => unsub()
-    } catch (e) {}
-  }, [])
+  if (loading) return (
+    <div className="py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="flex items-center justify-center mb-6"><Spinner label="Loading bundles..." /></div>
+        <SkeletonGrid columns={3} count={6} />
+      </div>
+    </div>
+  )
 
   return (
     <div>
@@ -207,7 +174,7 @@ const AT = () => {
         </div>
       </div>
 
-      {modalOpen && bundles[selectedIndex] && (
+      {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl shadow-2xl w-11/12 max-w-md">
             <div className="px-5 py-4 border-b border-white/30 flex items-center justify-between">
@@ -246,33 +213,39 @@ const AT = () => {
 
               <div className="flex justify-end gap-3">
                 <button onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button onClick={() => { setModalOpen(false); handleBuy(); }} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Buy</button>
+                <button
+                  onClick={() => { setModalOpen(false); handleBuy(); }}
+                  disabled={placing}
+                  className={"px-4 py-2 rounded-lg bg-blue-600 text-white " + (placing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700')}
+                >
+                  Place Order
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
-      <OutOfStockModal open={outOfStock} onClose={() => {}} message="Bundle out of stock" />
 
-          {successModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-              <div className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl shadow-2xl w-11/12 max-w-sm p-6 text-center">
-                <button onClick={() => setSuccessModalOpen(false)} className="absolute right-4 top-4 text-gray-700">✕</button>
-                <div className="flex flex-col items-center gap-4">
-                  <div className="rounded-full bg-green-100 p-4">
-                    <TiTick className="text-green-600" size={40} />
-                  </div>
-                  <div className="text-lg font-semibold text-gray-900">Order placed successfully</div>
-                  {successInfo?.purchaseId && (
-                    <div className="text-sm text-gray-600">Order ID: {successInfo.purchaseId}</div>
-                  )}
-                  <div className="w-full">
-                    <button onClick={() => setSuccessModalOpen(false)} className="w-full mt-3 px-4 py-2 rounded-lg bg-blue-600 text-white">OK</button>
-                  </div>
-                </div>
+      {successModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl shadow-2xl w-11/12 max-w-sm p-6 text-center">
+            <button onClick={() => setSuccessModalOpen(false)} className="absolute right-4 top-4 text-gray-700">✕</button>
+            <div className="flex flex-col items-center gap-4">
+              <div className="rounded-full bg-green-100 p-4">
+                <TiTick className="text-green-600" size={40} />
+              </div>
+              <div className="text-lg font-semibold text-gray-900">Order placed successfully</div>
+              {successInfo?.purchaseId && (
+                <div className="text-sm text-gray-600">Order ID: {successInfo.purchaseId}</div>
+              )}
+              <div className="w-full">
+                <button onClick={() => setSuccessModalOpen(false)} className="w-full mt-3 px-4 py-2 rounded-lg bg-blue-600 text-white">OK</button>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
+
       <div className="flex mb-4 mt-8 text-center justify-center items-center gap-2 text-gray-500">
          <p><FaRegCopyright className="inline-block" /> 2025 PulseMart. All rights reserved.</p>
 

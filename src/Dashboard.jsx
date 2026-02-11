@@ -63,6 +63,8 @@ const Dashboard = () => {
     return () => { if (typeof unsub === 'function') unsub() }
   }, [user])
 
+
+
   // show success modal when redirected from auto-purchase flow
   useEffect(() => {
     try {
@@ -220,9 +222,7 @@ const Dashboard = () => {
       <Notice />
       <div className="flex m-3 p-2 flex-col">
         <h3 className="font-bold text-3xl">Dashboard</h3>
-        <p className="mt-2">
-          {getGreeting()}, {user?.fullName || user?.displayName || user?.email || "Guest"}
-        </p>
+        <p className="mt-2">{getGreeting()}, {user?.fullName || user?.displayName || user?.email || "Guest"}</p>
       </div>
 
       <div className="mb-8">

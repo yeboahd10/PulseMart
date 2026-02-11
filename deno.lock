@@ -24,7 +24,6 @@
         "npm:eslint-plugin-react-refresh@~0.4.24",
         "npm:eslint@^9.39.1",
         "npm:express@^4.22.1",
-        "npm:firebase-admin@^13.6.0",
         "npm:firebase@^12.7.0",
         "npm:globals@^16.5.0",
         "npm:jsonwebtoken@9",
