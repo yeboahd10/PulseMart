@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { TiWarning } from 'react-icons/ti'
 import { db } from '../firebase'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, onSnapshot } from 'firebase/firestore'
 
 const DEFAULT_NOTICE = 'Good News,Delivery is Going Smoothly. Delivery Tracker is now available for all users. Check it out on the Dashboard to stay updated on your orders!'
 
@@ -10,25 +10,25 @@ const Notice = () => {
   const [noticeText, setNoticeText] = useState(DEFAULT_NOTICE)
 
   useEffect(() => {
-    // Fetch notice text from Firestore
-    const fetchNotice = async () => {
-      try {
-        const siteMetaRef = doc(db, 'meta', 'site')
-        const snap = await getDoc(siteMetaRef)
-        if (snap.exists()) {
-          const text = snap.data()?.notice || DEFAULT_NOTICE
-          setNoticeText(text)
-          checkShouldShow(text)
-        } else {
-          checkShouldShow(DEFAULT_NOTICE)
-        }
-      } catch (err) {
-        console.warn('Failed to fetch notice text', err)
+    // Real-time listener for notice text from Firestore
+    const siteMetaRef = doc(db, 'meta', 'site')
+    const unsubscribe = onSnapshot(siteMetaRef, (snap) => {
+      if (snap.exists()) {
+        const text = snap.data()?.notice || DEFAULT_NOTICE
+        setNoticeText(text)
+        checkShouldShow(text)
+      } else {
+        setNoticeText(DEFAULT_NOTICE)
         checkShouldShow(DEFAULT_NOTICE)
       }
-    }
+    }, (err) => {
+      console.warn('Failed to fetch notice text', err)
+      setNoticeText(DEFAULT_NOTICE)
+      checkShouldShow(DEFAULT_NOTICE)
+    })
 
-    fetchNotice()
+    // Cleanup listener on unmount
+    return () => unsubscribe()
   }, [])
 
   const checkShouldShow = (text) => {
