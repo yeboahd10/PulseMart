@@ -38,6 +38,7 @@ const statusMeta = (status) => {
 }
 
 const DATAMART_STATUS_CACHE_KEY = 'datamart_status_cache_v1'
+const TRACKER_ACTIVITY_CACHE_KEY = 'datamart_tracker_last_activity_v1'
 
 const loadDatamartStatusCache = () => {
   if (typeof window === 'undefined') return {}
@@ -59,6 +60,52 @@ const saveDatamartStatusCache = (cache) => {
   }
 }
 
+const loadTrackerActivityCache = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(TRACKER_ACTIVITY_CACHE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+const saveTrackerActivityCache = (tracker, lastActiveAt) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(TRACKER_ACTIVITY_CACHE_KEY, JSON.stringify({
+      tracker: tracker || null,
+      lastActiveAt: lastActiveAt || null
+    }))
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+const formatTrackerTime = (value) => {
+  if (!value) return null
+  const date = (typeof value === 'number') ? new Date(value) : new Date(String(value))
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+    timeZone: 'Africa/Accra'
+  }).format(date)
+}
+
+const getInitialTrackerData = () => {
+  const cached = loadTrackerActivityCache()
+  if (!cached) return null
+  // backward compatibility with old cache shape where payload was stored directly
+  if (cached?.tracker) return cached.tracker
+  return cached
+}
+
+const getInitialTrackerLastActiveAt = () => {
+  const cached = loadTrackerActivityCache()
+  return cached?.lastActiveAt || null
+}
+
 const Dashboard = () => {
   const { user } = useAuth();
   const [selected, setSelected] = useState("wallet");
@@ -77,7 +124,8 @@ const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [showAllOrders, setShowAllOrders] = useState(false)
   const [orderStatusMap, setOrderStatusMap] = useState({})
-  const [trackerData, setTrackerData] = useState(null)
+  const [trackerData, setTrackerData] = useState(() => getInitialTrackerData())
+  const [trackerLastActiveAt, setTrackerLastActiveAt] = useState(() => getInitialTrackerLastActiveAt())
   const [trackerLoading, setTrackerLoading] = useState(false)
   const [trackerError, setTrackerError] = useState('')
   const orderStatusMapRef = useRef({})
@@ -363,8 +411,14 @@ const Dashboard = () => {
         const body = await resp.json()
         if (!active) return
         const nextTracker = body?.normalized || body?.data || null
+        const isActivePayload = hasTrackerActivity(nextTracker)
+        if (isActivePayload) {
+          const ts = Date.now()
+          setTrackerLastActiveAt(ts)
+          saveTrackerActivityCache(nextTracker, ts)
+        }
         setTrackerData((prev) => {
-          if (!hasTrackerActivity(nextTracker) && prev) {
+          if (!isActivePayload && prev) {
             // Keep showing last meaningful tracker payload until new activity appears.
             return prev
           }
@@ -374,13 +428,15 @@ const Dashboard = () => {
         if (!active) return
         setTrackerError(String(err?.message || 'Failed to load tracker'))
       } finally {
-        if (active) setTrackerLoading(false)
+        if (active) {
+          setTrackerLoading(false)
+        }
       }
     }
 
     fetchTracker()
-    // Poll every 2 minutes.
-    intervalId = setInterval(fetchTracker, 120000)
+    // Poll every 30s for quicker transition out of idle while relying on server cache.
+    intervalId = setInterval(fetchTracker, 30000)
 
     return () => {
       active = false
@@ -394,6 +450,7 @@ const Dashboard = () => {
     const scanner = trackerData?.scanner || {}
     const scannerState = scanner.active ? 'active' : (scanner.waiting ? 'waiting' : 'idle')
     const stateColor = scannerState === 'active' ? 'bg-green-500' : (scannerState === 'waiting' ? 'bg-yellow-500' : 'bg-slate-400')
+    const lastActiveLabel = formatTrackerTime(trackerLastActiveAt)
 
     return (
       <div className="p-3 sm:p-4 rounded-lg border border-slate-200 bg-white">
@@ -413,6 +470,9 @@ const Dashboard = () => {
             {trackerData?.message && <div className="text-xs text-black">{trackerData.message}</div>}
             {trackerData?.checkingNow?.summary && <div className="text-xs text-black">{trackerData.checkingNow.summary}</div>}
             {trackerData?.lastDelivered?.summary && <div className="text-xs text-black">{trackerData.lastDelivered.summary}</div>}
+            {lastActiveLabel && (
+              <div className="text-[11px] text-slate-500">Last active update: {lastActiveLabel} GMT</div>
+            )}
           </div>
         )}
       </div>
