@@ -41,6 +41,7 @@ exports.handler = async (event) => {
     if (!apiKey) {
       return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Datamart API key not configured' }) }
     }
+    const normalizedApiKey = String(apiKey).trim()
 
     // Return cached response if still fresh
     const now = Date.now()
@@ -51,7 +52,8 @@ exports.handler = async (event) => {
     const baseUrl = resolveBaseUrl().replace(/\/$/, '')
     const upstream = await axios.get(`${baseUrl}/delivery-tracker`, {
       headers: {
-        'X-API-Key': apiKey,
+        'X-API-Key': normalizedApiKey,
+        Authorization: `Bearer ${normalizedApiKey}`,
         Accept: 'application/json'
       },
       timeout: 15000
@@ -93,6 +95,16 @@ exports.handler = async (event) => {
     // On 429, return stale cache rather than propagating the error
     if (status === 429 && cachedBody) {
       return { statusCode: 200, headers: { ...CORS_HEADERS, 'X-Cache': 'HIT-429' }, body: cachedBody }
+    }
+    if (status === 401) {
+      return {
+        statusCode: 401,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          message: 'Delivery tracker unauthorized: verify DATAMART_API_KEY/API_KEY and confirm it has access to /delivery-tracker',
+          error: data
+        })
+      }
     }
     return {
       statusCode: status,
