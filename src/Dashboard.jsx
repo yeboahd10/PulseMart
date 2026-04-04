@@ -300,7 +300,7 @@ const Dashboard = () => {
     return (
       <div className="p-3 sm:p-4 rounded-lg border border-slate-200 bg-white">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-xs sm:text-sm text-slate-600 font-semibold">Delivery Tracker</div>
+          <div className="text-lg sm:text-lg text-black font-bold">Delivery Tracker</div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span className={`w-2 h-2 rounded-full ${stateColor}`} />
             <span className="uppercase">{scannerState}</span>
