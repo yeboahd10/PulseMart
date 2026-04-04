@@ -3,7 +3,7 @@ import { TiWarning } from 'react-icons/ti'
 
 const PERM_KEY = 'noticeDismissedForever'
 const EXPIRY_KEY = 'noticeDismissExpiry'
-const DEFAULT_NOTICE = 'Due to validation issues, orders may take longer than expected.Now Customers can chat with our live agents in realtime and get immediate assistance.'
+const DEFAULT_NOTICE = 'Good News,Delivery is Going Smoothly. Delivery Tracker is now available for all users. Check it out on the Dashboard to stay updated on your orders!'
 
 const Notice = () => {
   const [open, setOpen] = useState(false)

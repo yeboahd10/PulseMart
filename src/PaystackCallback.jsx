@@ -169,6 +169,9 @@ const PaystackCallback = () => {
                   const resp = purchaseResp?.data || {}
                   const success = resp?.status === 'success' || resp?.success === true || resp?.order_status === 'success' || resp?.data?.status === 'success'
                   if (success) {
+                    const orderReference = resp?.orderReference || resp?.order_reference || resp?.data?.orderReference || resp?.data?.order_reference || null
+                    const transactionReference = resp?.transactionReference || resp?.transaction_ref || resp?.tx_ref || resp?.reference || resp?.data?.transactionReference || resp?.data?.reference || null
+
                     // determine display price: prefer metadata.displayPrice, fall back to response fields
                     const displayPrice = Number(purchaseMeta.displayPrice ?? purchaseMeta.display_price ?? resp?.displayPrice ?? resp?.data?.displayPrice ?? resp?.price ?? resp?.data?.price ?? 0) || 0
 
@@ -191,10 +194,12 @@ const PaystackCallback = () => {
                         capacity: purchaseMeta.capacity || purchaseMeta.size || purchaseMeta.bundle || '',
                         price: Number(displayPrice) || 0,
                         displayPrice: Number(displayPrice) || 0,
-                        transactionReference: resp?.transactionReference || resp?.transaction_ref || resp?.tx_ref || resp?.reference || resp?.data?.transactionReference || resp?.data?.reference || null,
+                        orderReference,
+                        transactionReference,
                         rawResponse: resp,
                         createdAt: serverTimestamp(),
-                        status: resp?.status || resp?.order_status || (resp?.data && resp.data.status) || 'success'
+                        status: resp?.status || resp?.order_status || (resp?.data && resp.data.status) || 'success',
+                        orderStatus: resp?.orderStatus || resp?.order_status || resp?.data?.orderStatus || resp?.data?.order_status || resp?.data?.status || resp?.status || 'pending'
                       }
 
                       tx2.set(newPurchaseRef, purchaseDoc)

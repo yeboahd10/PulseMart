@@ -13,7 +13,29 @@ import { updateProfile } from 'firebase/auth'
 import PaymentModal from './components/PaymentModal'
 import BundleCardSimple from './components/BundleCardSimple.jsx'
 import Notice from './components/Notice'
-import useOrderSnapshot from './hooks/useOrderSnapshot'
+
+const normalizeOrderStatus = (value) => {
+  const s = String(value || '').trim().toLowerCase()
+  if (!s) return 'pending'
+  if (s === 'completed' || s === 'delivered' || s === 'success' || s === 'sent') return 'completed'
+  if (s === 'failed' || s === 'error') return 'failed'
+  if (s === 'refunded') return 'refunded'
+  if (s === 'processing') return 'processing'
+  if (s === 'waiting' || s === 'queued') return 'waiting'
+  if (s === 'pending') return 'pending'
+  return s
+}
+
+const statusMeta = (status) => {
+  const s = normalizeOrderStatus(status)
+  if (s === 'completed') return { label: 'Delivered', badgeClass: 'bg-green-100 text-green-800' }
+  if (s === 'processing') return { label: 'Processing', badgeClass: 'bg-blue-100 text-blue-800' }
+  if (s === 'waiting') return { label: 'Waiting', badgeClass: 'bg-orange-100 text-orange-800' }
+  if (s === 'failed') return { label: 'Failed', badgeClass: 'bg-red-100 text-red-800' }
+  if (s === 'refunded') return { label: 'Refunded', badgeClass: 'bg-slate-200 text-slate-800' }
+  if (s === 'pending') return { label: 'Pending', badgeClass: 'bg-yellow-100 text-yellow-800' }
+  return { label: 'Unknown', badgeClass: 'bg-gray-100 text-gray-800' }
+}
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -32,11 +54,13 @@ const Dashboard = () => {
   const [copiedId, setCopiedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showAllOrders, setShowAllOrders] = useState(false)
+  const [orderStatusMap, setOrderStatusMap] = useState({})
+  const [trackerData, setTrackerData] = useState(null)
+  const [trackerLoading, setTrackerLoading] = useState(false)
+  const [trackerError, setTrackerError] = useState('')
   
   const [searchParams, setSearchParams] = useSearchParams()
-  const [successModalOpen, setSuccessModalOpen] = useState(false)
-  const [successInfo, setSuccessInfo] = useState(null)
-  const { order: liveOrder, loading: liveOrderLoading } = useOrderSnapshot(successInfo?.purchaseId || null)
+  const [, setSuccessModalOpen] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -71,12 +95,11 @@ const Dashboard = () => {
       const saved = searchParams.get('purchaseSaved')
       const pid = searchParams.get('purchaseId')
       if (saved && pid) {
-        setSuccessInfo({ purchaseId: pid })
         setSuccessModalOpen(true)
         // clear params so modal doesn't reappear on refresh
         setSearchParams({}, { replace: true })
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, [searchParams, setSearchParams])
@@ -107,10 +130,11 @@ const Dashboard = () => {
         const data = d.data() || {}
         const rawPrice = data.displayPrice ?? data.display_price ?? data.uiPrice ?? data.localPrice ?? data.price ?? data.amount ?? 0
         const displayPrice = Number(rawPrice || 0)
-        const rawStatus = data.status || data.order_status || data.tx_status || data.orderStatus || data.order_status || data.txStatus || data.orderStatus ||
+        const rawStatus = data.orderStatus || data.order_status || data.status || data.tx_status || data.txStatus ||
           data.rawResponse?.status || data.rawResponse?.data?.status || data.apiResponse?.status || data.data?.status ||
+          data.rawResponse?.data?.orderStatus || data.rawResponse?.orderStatus ||
           data.raw?.status || data.raw?.data?.status || data.response?.status || data.message || ''
-        let status = String(rawStatus || '').trim().toLowerCase() || ''
+        const status = normalizeOrderStatus(rawStatus || '')
 
         let createdAtDate = null
         if (data.createdAt) {
@@ -118,26 +142,9 @@ const Dashboard = () => {
             if (typeof data.createdAt.toDate === 'function') createdAtDate = data.createdAt.toDate()
             else if (typeof data.createdAt === 'number') createdAtDate = new Date(data.createdAt > 1e12 ? data.createdAt : data.createdAt * 1000)
             else createdAtDate = new Date(data.createdAt)
-          } catch (e) {
+          } catch {
             createdAtDate = null
           }
-        }
-
-        try {
-          if (createdAtDate) {
-            const age = Date.now() - createdAtDate.getTime()
-            if (status === 'success' || status === 'delivered') {
-              status = 'delivered'
-            } else {
-              if (age < 1 * 60 * 1000) status = 'pending'
-              else if (age < 1 * 60 * 1000 + 2 * 60 * 60 * 1000) status = 'processing'
-              else status = 'delivered'
-            }
-          } else {
-            if (!status) status = 'pending'
-          }
-        } catch (e) {
-          if (!status) status = 'unknown'
         }
 
         return {
@@ -146,8 +153,9 @@ const Dashboard = () => {
           phoneNumber: data.phoneNumber || data.phone || data.msisdn || '',
           dataAmount: data.capacity || data.size || data.bundle || '',
           price: displayPrice.toFixed(2),
+          orderReference: data.orderReference || data.order_reference || data.reference || data.rawResponse?.data?.orderReference || data.rawResponse?.orderReference || '',
           transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.reference || data.transactionId || data.txId || data.id || '',
-          status: status || 'unknown',
+          status,
           createdAt: createdAtDate,
           raw: data
         }
@@ -196,6 +204,122 @@ const Dashboard = () => {
     setCurrentPage(1)
     setShowAllOrders(false)
   }, [orders.length])
+
+  useEffect(() => {
+    if (!orders.length) {
+      setOrderStatusMap({})
+      return
+    }
+
+    let active = true
+    let intervalId
+
+    const syncOrderStatuses = async () => {
+      const candidates = orders.filter((o) => {
+        const localStatus = normalizeOrderStatus(o.status)
+        return !!o.orderReference && !['completed', 'failed', 'refunded'].includes(localStatus)
+      })
+
+      if (!candidates.length) return
+
+      try {
+        const responses = await Promise.all(candidates.map(async (o) => {
+          try {
+            const r = await fetch(`/.netlify/functions/order-status?reference=${encodeURIComponent(o.orderReference)}`)
+            if (!r.ok) return null
+            const payload = await r.json()
+            const upstream = payload?.data?.orderStatus || payload?.data?.status || payload?.normalized?.orderStatus || ''
+            return { id: o.id, status: normalizeOrderStatus(upstream || o.status), updatedAt: payload?.data?.updatedAt || payload?.normalized?.updatedAt || null }
+          } catch {
+            return null
+          }
+        }))
+
+        if (!active) return
+        const next = {}
+        responses.filter(Boolean).forEach((row) => {
+          next[row.id] = row
+        })
+
+        if (Object.keys(next).length > 0) {
+          setOrderStatusMap((prev) => ({ ...prev, ...next }))
+        }
+      } catch (e) {
+        console.error('Order status sync failed', e)
+      }
+    }
+
+    syncOrderStatuses()
+    intervalId = setInterval(syncOrderStatuses, 15000)
+
+    return () => {
+      active = false
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [orders])
+
+  useEffect(() => {
+    if (!['wallet', 'orders'].includes(selected)) return
+
+    let active = true
+    let intervalId
+
+    const fetchTracker = async () => {
+      setTrackerLoading(true)
+      setTrackerError('')
+      try {
+        const resp = await fetch('/.netlify/functions/delivery-tracker')
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const body = await resp.json()
+        if (!active) return
+        setTrackerData(body?.data || body?.normalized || null)
+      } catch (err) {
+        if (!active) return
+        setTrackerError(String(err?.message || 'Failed to load tracker'))
+      } finally {
+        if (active) setTrackerLoading(false)
+      }
+    }
+
+    fetchTracker()
+    intervalId = setInterval(fetchTracker, 15000)
+
+    return () => {
+      active = false
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [selected])
+
+  const getEffectiveStatus = (order) => normalizeOrderStatus(orderStatusMap[order.id]?.status || order.status)
+
+  const renderTrackerCard = () => {
+    const scanner = trackerData?.scanner || {}
+    const scannerState = scanner.active ? 'active' : (scanner.waiting ? 'waiting' : 'idle')
+    const stateColor = scannerState === 'active' ? 'bg-green-500' : (scannerState === 'waiting' ? 'bg-yellow-500' : 'bg-slate-400')
+
+    return (
+      <div className="p-3 sm:p-4 rounded-lg border border-slate-200 bg-white">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs sm:text-sm text-slate-600 font-semibold">Delivery Tracker</div>
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className={`w-2 h-2 rounded-full ${stateColor}`} />
+            <span className="uppercase">{scannerState}</span>
+          </div>
+        </div>
+
+        {trackerLoading && <div className="mt-2 text-xs text-slate-400">Loading tracker...</div>}
+        {trackerError && <div className="mt-2 text-xs text-red-500">{trackerError}</div>}
+
+        {!trackerLoading && !trackerError && (
+          <div className="mt-3 space-y-2">
+            {trackerData?.message && <div className="text-xs text-slate-500">{trackerData.message}</div>}
+            {trackerData?.checkingNow?.summary && <div className="text-xs text-slate-500">{trackerData.checkingNow.summary}</div>}
+            {trackerData?.lastDelivered?.summary && <div className="text-xs text-slate-500">{trackerData.lastDelivered.summary}</div>}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const hasChanges = () => {
     if (!user) return false
@@ -305,10 +429,10 @@ const Dashboard = () => {
                     }
                   }
 
-                  const st = String(o.status || '').toLowerCase()
-                  if (st === 'delivered' || st === 'success') completed += 1
-                  else if (st === 'pending' || st === 'processing') pending += 1
-                  else if (st === 'failed' || st === 'error') failed += 1
+                  const st = getEffectiveStatus(o)
+                  if (st === 'completed') completed += 1
+                  else if (st === 'pending' || st === 'processing' || st === 'waiting') pending += 1
+                  else if (st === 'failed' || st === 'refunded') failed += 1
                 })
 
                 const allOrders = orders.length
@@ -359,6 +483,8 @@ const Dashboard = () => {
                         <div className="px-2 py-1 text-xs rounded-full bg-red-50 text-red-700">Failed: {failed}</div>
                       </div>
                     </div>
+
+                    {renderTrackerCard()}
                   </div>
                 )
               })()}
@@ -400,7 +526,7 @@ const Dashboard = () => {
 
                     if (!resp.ok) {
                       let text = ''
-                      try { text = await resp.text(); const maybeJson = JSON.parse(text || '{}'); throw new Error(maybeJson.message || JSON.stringify(maybeJson) || resp.statusText) } catch (e) { throw new Error(text || resp.statusText || `HTTP ${resp.status}`) }
+                      try { text = await resp.text(); const maybeJson = JSON.parse(text || '{}'); throw new Error(maybeJson.message || JSON.stringify(maybeJson) || resp.statusText) } catch { throw new Error(text || resp.statusText || `HTTP ${resp.status}`) }
                     }
 
                     body = await resp.json()
@@ -414,10 +540,10 @@ const Dashboard = () => {
                       })
                       if (!fallbackResp.ok) {
                         let text = ''
-                        try { text = await fallbackResp.text(); const maybeJson = JSON.parse(text || '{}'); throw new Error(maybeJson.message || JSON.stringify(maybeJson) || fallbackResp.statusText) } catch (e) { throw new Error(text || fallbackResp.statusText || `HTTP ${fallbackResp.status}`) }
+                        try { text = await fallbackResp.text(); const maybeJson = JSON.parse(text || '{}'); throw new Error(maybeJson.message || JSON.stringify(maybeJson) || fallbackResp.statusText) } catch { throw new Error(text || fallbackResp.statusText || `HTTP ${fallbackResp.status}`) }
                       }
                       body = await fallbackResp.json()
-                    } catch (fallbackErr) {
+                    } catch {
                       // rethrow original error for outer catch to handle
                       throw netlifyErr
                     }
@@ -441,6 +567,10 @@ const Dashboard = () => {
         {selected === "orders" && (
           <div className="m-3 p-2 bg-base-100 rounded-box shadow-md">
             <h3 className="font-semibold mb-3 text-2xl">My Orders</h3>
+
+            <div className="mb-3">
+              {renderTrackerCard()}
+            </div>
 
             <div className="flex items-center justify-between mb-3">
               <div className="w-full max-w-md">
@@ -470,7 +600,7 @@ const Dashboard = () => {
                 return (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {pageItems.map((o) => (
-                      <div key={o.id} className="p-3 rounded-lg shadow-sm border border-sky-100 bg-gradient-to-r from-sky-50 to-sky-100 hover:shadow-md transition font-geom">
+                      <div key={o.id} className="p-3 rounded-lg shadow-sm border border-sky-100 bg-linear-to-r from-sky-50 to-sky-100 hover:shadow-md transition font-geom">
                         <div className="flex justify-between items-center">
                           <div className="font-semibold text-slate-800 truncate">{o.networkNumber}</div>
                           <div className="text-sm font-medium text-sky-700 bg-white/60 px-2 py-1 rounded">{Number(o.price || 0).toFixed(2)}</div>
@@ -492,23 +622,8 @@ const Dashboard = () => {
                               <div className="text-[10px] text-sky-500">Status</div>
                               <div className="mt-1">
                                 {(() => {
-                                  let s = 'unknown'
-                                  try {
-                                    const createdAt = o.createdAt
-                                    if (createdAt) {
-                                      const ts = (createdAt instanceof Date) ? createdAt.getTime() : new Date(createdAt).getTime()
-                                      const age = Date.now() - ts
-                                      if (age < 1 * 60 * 1000) s = 'pending'
-                                      else if (age < 1 * 60 * 1000 + 2 * 60 * 60 * 1000) s = 'processing'
-                                      else s = 'success'
-                                    }
-                                  } catch (e) {
-                                    s = 'unknown'
-                                  }
-
-                                  const label = s === 'success' ? 'Delivered' : (s === 'processing' ? 'Processing' : (s === 'pending' ? 'Pending' : 'Unknown'))
-                                  const badgeClass = s === 'success' ? 'bg-green-100 text-green-800' : (s === 'processing' ? 'bg-blue-100 text-blue-800' : (s === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'))
-                                  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${badgeClass}`}>{label}</span>
+                                  const meta = statusMeta(getEffectiveStatus(o))
+                                  return <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${meta.badgeClass}`}>{meta.label}</span>
                                 })()}
                               </div>
                             </div>
