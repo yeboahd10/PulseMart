@@ -3,6 +3,7 @@ import { TiTick } from "react-icons/ti";
 import { FaRegCopyright } from "react-icons/fa6";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import Notice from "./components/Notice";
 import mtn from "./assets/mtn.jpg";
 import telecel from "./assets/telecel.png";
 import at from "./assets/AT.png";
@@ -45,6 +46,7 @@ const Home = () => {
 
   return (
     <div className="flex justify-center items-center flex-col mt-8 ">
+      <Notice />
       <div className="flex text-center flex-col" data-reveal>
         <h4 className="text-3xl lg:text-4xl font-bold" data-reveal>Your most Trusted</h4>
         <h4 className="text-3xl lg:text-4xl font-bold text-blue-500" data-reveal>

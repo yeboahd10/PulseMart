@@ -4,6 +4,7 @@ import { db } from './firebase'
 import { useAuth } from './context/AuthContext'
 
 const ADMIN_EMAIL = 'akwasiappiah@gmail.com'
+const DEFAULT_NOTICE = 'Good News,Delivery is Going Smoothly. Delivery Tracker is now available for all users. Check it out on the Dashboard to stay updated on your orders!'
 
 const Admin = () => {
   const { user } = useAuth()
@@ -238,6 +239,41 @@ const Admin = () => {
               console.error('Failed to save maintenance message', err)
             }
           }}>Save</button>
+        </div>
+      </div>
+      {/* Notice Text Editor */}
+      <div className="mb-6 p-4 border rounded bg-white">
+        <h3 className="text-lg font-medium">Notice Management</h3>
+        <p className="text-sm text-gray-600 mt-2 mb-3">Edit the notice text shown to all users. Changing this text will show the notice again to users who dismissed it permanently.</p>
+        <div className="flex flex-col gap-3">
+          <textarea 
+            className="w-full px-3 py-2 border rounded text-sm" 
+            rows="4"
+            placeholder="Enter notice text..."
+            value={noticeMessage}
+            onChange={(e) => setNoticeMessage(e.target.value)}
+          />
+          <button 
+            className="w-full sm:w-auto px-4 py-2 bg-sky-600 text-white rounded hover:bg-sky-700"
+            onClick={async () => {
+              try {
+                await setDoc(siteMetaRef, { 
+                  notice: noticeMessage || DEFAULT_NOTICE,
+                  maintenance, 
+                  message: maintenanceMessage || '',
+                  outOfStock_MTN: outOfStockMTN, 
+                  outOfStock_TELECEL: outOfStockTelecel, 
+                  outOfStock_AT: outOfStockAT 
+                }, { merge: true })
+                alert('Notice updated successfully!')
+              } catch (err) {
+                console.error('Failed to update notice', err)
+                alert('Failed to update notice')
+              }
+            }}
+          >
+            Update Notice
+          </button>
         </div>
       </div>
     {/* Site notice is managed by code; editor removed per request */}

@@ -440,6 +440,8 @@ const Dashboard = () => {
 
                 return (
                   <div className="space-y-4">
+                    {renderTrackerCard()}
+
                     <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 bg-white">
                       <div>
                         <div className="text-sm text-slate-500">Current Balance</div>
@@ -483,8 +485,6 @@ const Dashboard = () => {
                         <div className="px-2 py-1 text-xs rounded-full bg-red-50 text-red-700">Failed: {failed}</div>
                       </div>
                     </div>
-
-                    {renderTrackerCard()}
                   </div>
                 )
               })()}
