@@ -13,16 +13,21 @@ const Notice = () => {
     // Real-time listener for notice text from Firestore
     const siteMetaRef = doc(db, 'meta', 'site')
     const unsubscribe = onSnapshot(siteMetaRef, (snap) => {
+      console.log('Notice listener fired, snap exists:', snap.exists())
       if (snap.exists()) {
-        const text = snap.data()?.notice || DEFAULT_NOTICE
+        const data = snap.data()
+        console.log('Firestore data:', data)
+        const text = data?.notice || DEFAULT_NOTICE
+        console.log('Setting notice text to:', text)
         setNoticeText(text)
         checkShouldShow(text)
       } else {
+        console.log('No notice document in Firestore')
         setNoticeText(DEFAULT_NOTICE)
         checkShouldShow(DEFAULT_NOTICE)
       }
     }, (err) => {
-      console.warn('Failed to fetch notice text', err)
+      console.error('Firestore listener error:', err)
       setNoticeText(DEFAULT_NOTICE)
       checkShouldShow(DEFAULT_NOTICE)
     })
@@ -34,23 +39,30 @@ const Notice = () => {
   const checkShouldShow = (text) => {
     // Create a hash of the notice text
     const noticeHash = btoa(text) // Simple base64 "hash"
+    console.log('checkShouldShow called with text:', text)
+    console.log('Current hash:', noticeHash)
 
     // Check if dismissed forever with a different notice
     const dismissedForeverHash = localStorage.getItem('noticeDismissForeverHash')
+    console.log('Stored forever hash:', dismissedForeverHash)
     if (dismissedForeverHash && dismissedForeverHash === noticeHash) {
       // Same notice dismissed forever, don't show
+      console.log('Notice dismissed forever')
       return
     }
 
     // Check if dismissed for today
     const dismissedForDay = localStorage.getItem('noticeDismissForDay')
     const today = new Date().toDateString()
+    console.log('Dismissed for day:', dismissedForDay, 'Today:', today)
     if (dismissedForDay === today) {
       // Dismissed today, don't show
+      console.log('Notice dismissed for today')
       return
     }
 
     // Show the notice
+    console.log('Showing notice')
     setOpen(true)
   }
 
