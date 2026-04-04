@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { collection, getDocs, query, where, orderBy, limit, updateDoc, doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from './firebase'
 import { useAuth } from './context/AuthContext'
+import Spinner from './components/Spinner'
 
 const ADMIN_EMAIL = 'akwasiappiah@gmail.com'
 const DEFAULT_NOTICE = 'Good News,Delivery is Going Smoothly. Delivery Tracker is now available for all users. Check it out on the Dashboard to stay updated on your orders!'
@@ -206,7 +207,14 @@ const Admin = () => {
     )
   }
 
-  if (loading) return <div className="p-6 max-w-4xl mx-auto">Loading...</div>
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center px-6">
+        <Spinner label="Loading admin console..." />
+      </div>
+    )
+  }
+
   if (error) return <div className="p-6 max-w-4xl mx-auto">Error: {error}</div>
 
   return (
@@ -257,8 +265,10 @@ const Admin = () => {
             className="w-full sm:w-auto px-4 py-2 bg-sky-600 text-white rounded hover:bg-sky-700"
             onClick={async () => {
               try {
+                const nextNotice = noticeMessage || DEFAULT_NOTICE
                 await setDoc(siteMetaRef, { 
-                  notice: noticeMessage || DEFAULT_NOTICE,
+                  notice: nextNotice,
+                  noticeUpdatedAt: Date.now(),
                   maintenance, 
                   message: maintenanceMessage || '',
                   outOfStock_MTN: outOfStockMTN, 

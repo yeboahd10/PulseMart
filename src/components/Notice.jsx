@@ -4,78 +4,71 @@ import { db } from '../firebase'
 import { doc, onSnapshot } from 'firebase/firestore'
 
 const DEFAULT_NOTICE = 'Good News,Delivery is Going Smoothly. Delivery Tracker is now available for all users. Check it out on the Dashboard to stay updated on your orders!'
+const DISMISS_FOREVER_KEY = 'noticeDismissForeverSignature'
+const DISMISS_DAY_KEY = 'noticeDismissDaySignature'
+const DISMISS_DAY_DATE_KEY = 'noticeDismissDayDate'
+
+const getNoticeSignature = (text, updatedAt) => `${updatedAt || 'default'}::${text || DEFAULT_NOTICE}`
 
 const Notice = () => {
   const [open, setOpen] = useState(false)
   const [noticeText, setNoticeText] = useState(DEFAULT_NOTICE)
+  const [noticeSignature, setNoticeSignature] = useState(getNoticeSignature(DEFAULT_NOTICE, 'default'))
+
+  function checkShouldShow(signature) {
+    const dismissedForeverSignature = localStorage.getItem(DISMISS_FOREVER_KEY)
+    if (dismissedForeverSignature && dismissedForeverSignature === signature) {
+      return
+    }
+
+    const dismissedForDaySignature = localStorage.getItem(DISMISS_DAY_KEY)
+    const dismissedForDay = localStorage.getItem(DISMISS_DAY_DATE_KEY)
+    const today = new Date().toDateString()
+    if (dismissedForDay === today && dismissedForDaySignature === signature) {
+      return
+    }
+
+    setOpen(true)
+  }
 
   useEffect(() => {
     // Real-time listener for notice text from Firestore
     const siteMetaRef = doc(db, 'meta', 'site')
     const unsubscribe = onSnapshot(siteMetaRef, (snap) => {
-      console.log('Notice listener fired, snap exists:', snap.exists())
       if (snap.exists()) {
         const data = snap.data()
-        console.log('Firestore data:', data)
         const text = data?.notice || DEFAULT_NOTICE
-        console.log('Setting notice text to:', text)
+        const signature = getNoticeSignature(text, data?.noticeUpdatedAt)
         setNoticeText(text)
-        checkShouldShow(text)
+        setNoticeSignature(signature)
+        checkShouldShow(signature)
       } else {
-        console.log('No notice document in Firestore')
+        const signature = getNoticeSignature(DEFAULT_NOTICE, 'default')
         setNoticeText(DEFAULT_NOTICE)
-        checkShouldShow(DEFAULT_NOTICE)
+        setNoticeSignature(signature)
+        checkShouldShow(signature)
       }
     }, (err) => {
       console.error('Firestore listener error:', err)
+      const signature = getNoticeSignature(DEFAULT_NOTICE, 'default')
       setNoticeText(DEFAULT_NOTICE)
-      checkShouldShow(DEFAULT_NOTICE)
+      setNoticeSignature(signature)
+      checkShouldShow(signature)
     })
 
     // Cleanup listener on unmount
     return () => unsubscribe()
   }, [])
 
-  const checkShouldShow = (text) => {
-    // Create a hash of the notice text
-    const noticeHash = btoa(text) // Simple base64 "hash"
-    console.log('checkShouldShow called with text:', text)
-    console.log('Current hash:', noticeHash)
-
-    // Check if dismissed forever with a different notice
-    const dismissedForeverHash = localStorage.getItem('noticeDismissForeverHash')
-    console.log('Stored forever hash:', dismissedForeverHash)
-    if (dismissedForeverHash && dismissedForeverHash === noticeHash) {
-      // Same notice dismissed forever, don't show
-      console.log('Notice dismissed forever')
-      return
-    }
-
-    // Check if dismissed for today
-    const dismissedForDay = localStorage.getItem('noticeDismissForDay')
-    const today = new Date().toDateString()
-    console.log('Dismissed for day:', dismissedForDay, 'Today:', today)
-    if (dismissedForDay === today) {
-      // Dismissed today, don't show
-      console.log('Notice dismissed for today')
-      return
-    }
-
-    // Show the notice
-    console.log('Showing notice')
-    setOpen(true)
-  }
-
   const dismissForDay = () => {
     const today = new Date().toDateString()
-    localStorage.setItem('noticeDismissForDay', today)
+    localStorage.setItem(DISMISS_DAY_DATE_KEY, today)
+    localStorage.setItem(DISMISS_DAY_KEY, noticeSignature)
     setOpen(false)
   }
 
   const dismissForever = () => {
-    // Store the hash of the current notice text so we can show it again if text changes
-    const noticeHash = btoa(noticeText)
-    localStorage.setItem('noticeDismissForeverHash', noticeHash)
+    localStorage.setItem(DISMISS_FOREVER_KEY, noticeSignature)
     setOpen(false)
   }
 

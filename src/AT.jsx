@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef } from 'firebase/firestore'
+import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef, doc, onSnapshot } from 'firebase/firestore'
 import { db } from './firebase'
 import { useAuth } from './context/AuthContext'
 import usePackages from './hooks/usePackages'
@@ -7,6 +7,7 @@ import Spinner from './components/Spinner'
 import SkeletonGrid from './components/SkeletonGrid'
 import BundleCard from './components/BundleCard'
 import Notice from './components/Notice'
+import OutOfStockModal from './components/OutOfStockModal'
 import axios from 'axios'
 import { TiTick } from 'react-icons/ti'
 import { FaCediSign, FaRegCopyright } from 'react-icons/fa6'
@@ -22,6 +23,7 @@ const localPricesAT = [4.35, 8.95, 13.85, 17.7, 21.0, 24.7, 33.7, 41.7, 47.7, 57
 const AT = () => {
   const { user } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
+  const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [phone, setPhone] = useState('')
   const { bundles, setBundles, loading, error } = usePackages('AT', localPricesAT)
@@ -30,12 +32,27 @@ const AT = () => {
   const [placing, setPlacing] = useState(false)
 
   useEffect(() => {
-    // placeholder for any AT-specific subscriptions if needed
+    try {
+      const ref = doc(db, 'meta', 'site')
+      const unsub = onSnapshot(ref, (snap) => {
+        const data = snap.exists() ? snap.data() : {}
+        const nextOutOfStock = Boolean(data.outOfStock_AT)
+        setOutOfStock(nextOutOfStock)
+        if (nextOutOfStock) setModalOpen(false)
+      }, (err) => console.warn('site meta snapshot error', err))
+      return () => unsub()
+    } catch (e) {
+      return undefined
+    }
   }, [])
 
   const handleBuy = async () => {
     const b = bundles[selectedIndex]
     if (!b) return
+    if (outOfStock) {
+      setModalOpen(false)
+      return
+    }
     setPlacing(true)
     if (!phone) {
       alert('Please enter a phone number')
@@ -166,8 +183,8 @@ const AT = () => {
         <div className="w-full max-w-4xl px-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
             {bundles.map((b, idx) => (
-              <div key={idx} className={'menu-item'} style={{ ['--delay']: `${idx * 60}ms` }} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }}>
-                <BundleCard b={b} onClick={() => { setSelectedIndex(idx); setModalOpen(true) }} />
+              <div key={idx} className={'menu-item'} style={{ ['--delay']: `${idx * 60}ms` }} onClick={() => { setSelectedIndex(idx); if (outOfStock) setModalOpen(false); else setModalOpen(true) }}>
+                <BundleCard b={b} onClick={() => { setSelectedIndex(idx); if (outOfStock) setModalOpen(false); else setModalOpen(true) }} />
               </div>
             ))}
           </div>
@@ -245,6 +262,8 @@ const AT = () => {
           </div>
         </div>
       )}
+
+      <OutOfStockModal open={outOfStock} onClose={() => {}} message="Bundle out of stock" />
 
       <div className="flex mb-4 mt-8 text-center justify-center items-center gap-2 text-gray-500">
          <p><FaRegCopyright className="inline-block" /> 2025 PulseMart. All rights reserved.</p>
