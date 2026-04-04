@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from 'react-router-dom'
 import { TiTick } from 'react-icons/ti'
 import { useAuth } from "./context/AuthContext";
@@ -37,6 +37,28 @@ const statusMeta = (status) => {
   return { label: 'Unknown', badgeClass: 'bg-gray-100 text-gray-800' }
 }
 
+const DATAMART_STATUS_CACHE_KEY = 'datamart_status_cache_v1'
+
+const loadDatamartStatusCache = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(DATAMART_STATUS_CACHE_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const saveDatamartStatusCache = (cache) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(DATAMART_STATUS_CACHE_KEY, JSON.stringify(cache || {}))
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
 const Dashboard = () => {
   const { user } = useAuth();
   const [selected, setSelected] = useState("wallet");
@@ -58,6 +80,8 @@ const Dashboard = () => {
   const [trackerData, setTrackerData] = useState(null)
   const [trackerLoading, setTrackerLoading] = useState(false)
   const [trackerError, setTrackerError] = useState('')
+  const orderStatusMapRef = useRef({})
+  const datamartStatusCacheRef = useRef(loadDatamartStatusCache())
   
   const [searchParams, setSearchParams] = useSearchParams()
   const [, setSuccessModalOpen] = useState(false)
@@ -122,19 +146,38 @@ const Dashboard = () => {
   ]
 
   useEffect(() => {
+    orderStatusMapRef.current = orderStatusMap
+  }, [orderStatusMap])
+
+  useEffect(() => {
     if (!user?.uid) { setOrders([]); return }
     try {
       const purchasesRef = collection(db, 'purchases')
 
       const mapSnap = (snap) => snap.docs.map(d => {
         const data = d.data() || {}
+        const orderReference = data.orderReference || data.order_reference || data.reference || data.rawResponse?.data?.orderReference || data.rawResponse?.orderReference || ''
+        const cacheKey = orderReference || d.id
+        const cached = datamartStatusCacheRef.current[cacheKey] || null
         const rawPrice = data.displayPrice ?? data.display_price ?? data.uiPrice ?? data.localPrice ?? data.price ?? data.amount ?? 0
         const displayPrice = Number(rawPrice || 0)
+        const legacySuccess = !orderReference && (
+          String(data.rawResponse?.status || '').toLowerCase() === 'success' ||
+          String(data.raw?.status || '').toLowerCase() === 'success' ||
+          String(data.status || '').toLowerCase() === 'success' ||
+          String(data.tx_status || '').toLowerCase() === 'success' ||
+          String(data.txStatus || '').toLowerCase() === 'success'
+        )
         // Use only Datamart-specific order status fields — NOT the Paystack/HTTP success flag from rawResponse.status
         const rawStatus = data.orderStatus || data.order_status ||
           data.rawResponse?.data?.orderStatus || data.rawResponse?.orderStatus ||
-          data.raw?.data?.orderStatus || data.raw?.orderStatus || ''
+          data.raw?.data?.orderStatus || data.raw?.orderStatus || cached?.status || (legacySuccess ? 'completed' : '')
         const status = normalizeOrderStatus(rawStatus || '')
+        const statusUpdatedAt = data.orderStatusUpdatedAt || data.statusUpdatedAt || cached?.updatedAt || null
+
+        if (cacheKey && status && status !== 'pending') {
+          datamartStatusCacheRef.current[cacheKey] = { status, updatedAt: statusUpdatedAt }
+        }
 
         let createdAtDate = null
         if (data.createdAt) {
@@ -153,9 +196,10 @@ const Dashboard = () => {
           phoneNumber: data.phoneNumber || data.phone || data.msisdn || '',
           dataAmount: data.capacity || data.size || data.bundle || '',
           price: displayPrice.toFixed(2),
-          orderReference: data.orderReference || data.order_reference || data.reference || data.rawResponse?.data?.orderReference || data.rawResponse?.orderReference || '',
+          orderReference,
           transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.reference || data.transactionId || data.txId || data.id || '',
           status,
+          statusUpdatedAt,
           createdAt: createdAtDate,
           raw: data
         }
@@ -239,12 +283,41 @@ const Dashboard = () => {
 
         if (!active) return
         const next = {}
+        const writes = []
+
         responses.filter(Boolean).forEach((row) => {
+          const sourceOrder = candidates.find((c) => c.id === row.id)
+          if (!sourceOrder) return
+
+          const prevEntry = orderStatusMapRef.current[row.id] || null
+          const previousStatus = normalizeOrderStatus(prevEntry?.status || sourceOrder.status)
+          const previousUpdatedAt = String(prevEntry?.updatedAt || sourceOrder.statusUpdatedAt || '')
+          const nextUpdatedAt = String(row.updatedAt || '')
+          const changed = row.status !== previousStatus || nextUpdatedAt !== previousUpdatedAt
+
+          if (!changed) return
+
           next[row.id] = row
+
+          const cacheKey = sourceOrder.orderReference || sourceOrder.id
+          datamartStatusCacheRef.current[cacheKey] = { status: row.status, updatedAt: row.updatedAt || null }
+
+          writes.push(
+            setDoc(doc(db, 'purchases', sourceOrder.id), {
+              orderStatus: row.status,
+              orderStatusUpdatedAt: row.updatedAt || null,
+              lastStatusSyncAt: new Date().toISOString(),
+              statusSource: 'datamart_poll'
+            }, { merge: true }).catch((err) => {
+              console.warn('Failed to persist Datamart status', sourceOrder.id, err)
+            })
+          )
         })
 
         if (Object.keys(next).length > 0) {
           setOrderStatusMap((prev) => ({ ...prev, ...next }))
+          saveDatamartStatusCache(datamartStatusCacheRef.current)
+          if (writes.length) await Promise.all(writes)
         }
       } catch (e) {
         console.error('Order status sync failed', e)
@@ -266,6 +339,17 @@ const Dashboard = () => {
     let active = true
     let intervalId
 
+    const hasTrackerActivity = (tracker) => {
+      const scanner = tracker?.scanner || {}
+      const activeScanner = Boolean(scanner.active || scanner.waiting)
+      const hasDetails = Boolean(
+        tracker?.checkingNow?.summary ||
+        tracker?.lastDelivered?.summary
+      )
+      const hasUserOrders = Array.isArray(tracker?.yourOrders) && tracker.yourOrders.length > 0
+      return activeScanner || hasDetails || hasUserOrders
+    }
+
     const fetchTracker = async () => {
       setTrackerLoading(true)
       setTrackerError('')
@@ -278,7 +362,14 @@ const Dashboard = () => {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
         const body = await resp.json()
         if (!active) return
-        setTrackerData(body?.data || body?.normalized || null)
+        const nextTracker = body?.normalized || body?.data || null
+        setTrackerData((prev) => {
+          if (!hasTrackerActivity(nextTracker) && prev) {
+            // Keep showing last meaningful tracker payload until new activity appears.
+            return prev
+          }
+          return nextTracker
+        })
       } catch (err) {
         if (!active) return
         setTrackerError(String(err?.message || 'Failed to load tracker'))
@@ -288,8 +379,7 @@ const Dashboard = () => {
     }
 
     fetchTracker()
-    // Poll every 2 minutes to stay well within Datamart rate limits.
-    // The Netlify function also caches for 60s so rapid tab-switches won't hit the real API.
+    // Poll every 2 minutes.
     intervalId = setInterval(fetchTracker, 120000)
 
     return () => {

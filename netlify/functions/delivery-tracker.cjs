@@ -8,9 +8,10 @@ const CORS_HEADERS = {
 }
 
 // Module-level cache — survives warm Netlify function instances (60s TTL)
-const CACHE_TTL_MS = 60 * 1000
+const ACTIVE_CACHE_TTL_MS = 60 * 1000
+const IDLE_CACHE_TTL_MS = 10 * 1000
 let cachedBody = null
-let cachedAt = 0
+let cachedExpiresAt = 0
 
 const resolveApiKey = () => (
   process.env.DATAMART_API_KEY ||
@@ -41,7 +42,7 @@ exports.handler = async (event) => {
 
     // Return cached response if still fresh
     const now = Date.now()
-    if (cachedBody && (now - cachedAt) < CACHE_TTL_MS) {
+    if (cachedBody && now < cachedExpiresAt) {
       return { statusCode: 200, headers: { ...CORS_HEADERS, 'X-Cache': 'HIT' }, body: cachedBody }
     }
 
@@ -56,6 +57,13 @@ exports.handler = async (event) => {
 
     const payload = upstream.data || {}
     const data = payload.data || {}
+    const hasActivity = Boolean(
+      data?.scanner?.active ||
+      data?.scanner?.waiting ||
+      data?.checkingNow?.summary ||
+      data?.lastDelivered?.summary ||
+      (Array.isArray(data?.yourOrders) && data.yourOrders.length > 0)
+    )
 
     const responseBody = JSON.stringify({
       ...payload,
@@ -70,7 +78,7 @@ exports.handler = async (event) => {
     })
 
     cachedBody = responseBody
-    cachedAt = Date.now()
+    cachedExpiresAt = Date.now() + (hasActivity ? ACTIVE_CACHE_TTL_MS : IDLE_CACHE_TTL_MS)
 
     return {
       statusCode: upstream.status || 200,
