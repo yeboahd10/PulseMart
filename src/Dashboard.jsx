@@ -312,9 +312,9 @@ const Dashboard = () => {
 
         {!trackerLoading && !trackerError && (
           <div className="mt-3 space-y-2">
-            {trackerData?.message && <div className="text-xs text-slate-500">{trackerData.message}</div>}
-            {trackerData?.checkingNow?.summary && <div className="text-xs text-slate-500">{trackerData.checkingNow.summary}</div>}
-            {trackerData?.lastDelivered?.summary && <div className="text-xs text-slate-500">{trackerData.lastDelivered.summary}</div>}
+            {trackerData?.message && <div className="text-xs text-black">{trackerData.message}</div>}
+            {trackerData?.checkingNow?.summary && <div className="text-xs text-black">{trackerData.checkingNow.summary}</div>}
+            {trackerData?.lastDelivered?.summary && <div className="text-xs text-black">{trackerData.lastDelivered.summary}</div>}
           </div>
         )}
       </div>
