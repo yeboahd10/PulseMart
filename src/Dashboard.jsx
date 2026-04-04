@@ -271,6 +271,10 @@ const Dashboard = () => {
       setTrackerError('')
       try {
         const resp = await fetch('/.netlify/functions/delivery-tracker')
+        if (resp.status === 429) {
+          // Rate limited — keep showing last data silently, don't clear it
+          return
+        }
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
         const body = await resp.json()
         if (!active) return
@@ -284,7 +288,9 @@ const Dashboard = () => {
     }
 
     fetchTracker()
-    intervalId = setInterval(fetchTracker, 15000)
+    // Poll every 2 minutes to stay well within Datamart rate limits.
+    // The Netlify function also caches for 60s so rapid tab-switches won't hit the real API.
+    intervalId = setInterval(fetchTracker, 120000)
 
     return () => {
       active = false
