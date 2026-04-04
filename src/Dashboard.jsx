@@ -130,10 +130,10 @@ const Dashboard = () => {
         const data = d.data() || {}
         const rawPrice = data.displayPrice ?? data.display_price ?? data.uiPrice ?? data.localPrice ?? data.price ?? data.amount ?? 0
         const displayPrice = Number(rawPrice || 0)
-        const rawStatus = data.orderStatus || data.order_status || data.status || data.tx_status || data.txStatus ||
-          data.rawResponse?.status || data.rawResponse?.data?.status || data.apiResponse?.status || data.data?.status ||
+        // Use only Datamart-specific order status fields — NOT the Paystack/HTTP success flag from rawResponse.status
+        const rawStatus = data.orderStatus || data.order_status ||
           data.rawResponse?.data?.orderStatus || data.rawResponse?.orderStatus ||
-          data.raw?.status || data.raw?.data?.status || data.response?.status || data.message || ''
+          data.raw?.data?.orderStatus || data.raw?.orderStatus || ''
         const status = normalizeOrderStatus(rawStatus || '')
 
         let createdAtDate = null
@@ -215,10 +215,12 @@ const Dashboard = () => {
     let intervalId
 
     const syncOrderStatuses = async () => {
-      const candidates = orders.filter((o) => {
-        const localStatus = normalizeOrderStatus(o.status)
-        return !!o.orderReference && !['completed', 'failed', 'refunded'].includes(localStatus)
-      })
+      // Poll ALL orders that have an orderReference — API response is the source of truth.
+      // Never skip based on local status since local status can be wrong (e.g. Paystack
+      // "success" mistaken for delivery completion). Once API returns completed/failed/refunded
+      // the orderStatusMap entry will stay correct and polling stops naturally via the
+      // active flag / interval cleanup when all map entries are terminal.
+      const candidates = orders.filter((o) => !!o.orderReference)
 
       if (!candidates.length) return
 
