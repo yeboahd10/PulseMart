@@ -87,6 +87,7 @@ const Navbar = () => {
         
         <div className='flex-none hidden sm:flex items-center gap-2'>
           <Link to="/" className='btn btn-ghost  text-md '>Home</Link>
+          <Link to="/afa-registrations" className='btn btn-ghost text-md'>Afa Registrations</Link>
           {user ? (
             <>
               <div className='ml-2 px-3 py-1 bg-gray-100 text-sm rounded-md border shadow-sm text-gray-700 flex items-center gap-2'>
@@ -152,6 +153,15 @@ const Navbar = () => {
                 </svg>
               </span>
               <span className='flex-1 text-sm font-medium text-gray-800'>Home</span>
+            </Link>
+
+            <Link to="/afa-registrations" onClick={closeMenu} className={'flex items-center gap-3 px-4 py-3 hover:bg-gray-50 menu-item'} style={{ ['--delay']: `${(animIndex++) * 60}ms` }}>
+              <span className='w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center'>
+                <svg xmlns='http://www.w3.org/2000/svg' className='w-5 h-5 text-emerald-600' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M9 12h6M9 16h6M8 4h8a2 2 0 012 2v12a2 2 0 01-2 2H8a2 2 0 01-2-2V6a2 2 0 012-2z' />
+                </svg>
+              </span>
+              <span className='flex-1 text-sm font-medium text-gray-800'>Afa Registrations</span>
             </Link>
 
             {user ? (

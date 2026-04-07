@@ -10,6 +10,7 @@ import Dashboard from './Dashboard.jsx'
 import MTN from './MTN.jsx'
 import Telecel from './Telecel.jsx'
 import AT from './AT.jsx'
+import AfaRegistrations from './AfaRegistrations.jsx'
 import Admin from './Admin.jsx'
 import WhatsAppButton from './components/WhatsAppButton'
 import PaystackCallback from './PaystackCallback'
@@ -63,6 +64,7 @@ function App() {
         <Route path="/telecel" element={<Telecel />} />
         <Route path="/airteltigo" element={<AT />} />
         <Route path="/at" element={<AT />} />
+        <Route path="/afa-registrations" element={<AfaRegistrations />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/paystack/callback" element={<PaystackCallback />} />
       </Routes>

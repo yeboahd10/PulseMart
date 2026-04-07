@@ -170,6 +170,18 @@ const Home = () => {
           </div>
         </div>
       </div>
+
+      <div className="w-full flex justify-center mt-2" data-reveal>
+        <div className="card bg-base-100 w-76 shadow-sm m-4 border border-emerald-100 hover:shadow-lg transition-shadow duration-300 hover:bg-emerald-50">
+          <div className="card-body text-center">
+            <h2 className="card-title justify-center">Afa Registrations</h2>
+            <p className="text-sm text-slate-600">Register for AFA services in a few steps.</p>
+            <div className="card-actions justify-center mt-2">
+              <Link to="/afa-registrations" className="btn btn-primary w-39">Go to Registration</Link>
+            </div>
+          </div>
+        </div>
+      </div>
       
       </div>
 
