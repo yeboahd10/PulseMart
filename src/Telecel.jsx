@@ -17,11 +17,8 @@ import { TiTick } from 'react-icons/ti'
 import { Link } from "react-router-dom";
 
 // module-scope env and prices for Telecel
-const apiUrlTelecel = import.meta.env.VITE_API_BASE_TELECEL
 const apiKey = import.meta.env.VITE_API_KEY
-const purchaseUrl = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
-  ? '/.netlify/functions/purchase-proxy'
-  : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy')
+const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy'
 const localPricesTelecel = [25, 40, 48, 55, 68,85,100,120,137,157,174,195,360]
 
 const Telecel = () => {

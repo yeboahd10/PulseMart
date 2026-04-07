@@ -22,8 +22,10 @@ const resolveSandbox = () => {
 }
 
 const normalizePhone = (value) => {
-  let digits = String(value || '').replace(/\D/g, '')
+  let digits = String(value || '').trim().replace(/\D/g, '')
   if (!digits) return ''
+  if (digits.startsWith('00233') && digits.length >= 14) return `233${digits.slice(5)}`
+  if (digits.startsWith('2330') && digits.length === 13) return `233${digits.slice(4)}`
   if (digits.startsWith('233') && digits.length === 12) return digits
   if (digits.startsWith('0') && digits.length === 10) return `233${digits.slice(1)}`
   if (digits.length === 9) return `233${digits}`

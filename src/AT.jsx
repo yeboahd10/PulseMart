@@ -14,9 +14,7 @@ import { FaCediSign, FaRegCopyright } from 'react-icons/fa6'
 import { mapNetwork } from './utils/network'
 
 const apiKey = import.meta.env.VITE_API_KEY
-const purchaseUrl = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
-  ? '/.netlify/functions/purchase-proxy'
-  : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy')
+const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy'
 
 const localPricesAT = [4.35, 8.95, 13.85, 17.7, 21.0, 24.7, 33.7, 41.7, 47.7, 57.7, 95.2, 115.2, 151.2, 190.2]
 

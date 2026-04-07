@@ -15,12 +15,8 @@ import { FaCediSign, FaPhone, FaRegCopyright } from "react-icons/fa6";
 import { mapNetwork } from './utils/network'
 import { Link } from "react-router-dom";
 
-const apiUrl = import.meta.env.VITE_API_BASE ;
-const PurchaseapiUrl = import.meta.env.VITE_API_PURCHASE ;
 const apiKey = import.meta.env.VITE_API_KEY;
-const purchaseUrl = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
-  ? '/.netlify/functions/purchase-proxy'
-  : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy');
+const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy';
 
 const localPrices = [4.7, 9.4, 13.9, 18.7, 23.9, 27.9,35.7,44.5,62.5,83,105,129,166,207,407];
 const MTN = () => {

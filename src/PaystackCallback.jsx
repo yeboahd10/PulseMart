@@ -137,7 +137,7 @@ const PaystackCallback = () => {
               if (purchaseMeta) {
                 const purchaseEndpoint = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
                   ? '/.netlify/functions/purchase-proxy'
-                  : (import.meta.env.VITE_API_PURCHASE || '/.netlify/functions/purchase-proxy')
+                  : (import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy')
 
                 const payload = {
                   phoneNumber: purchaseMeta.phoneNumber || purchaseMeta.phone || '',
