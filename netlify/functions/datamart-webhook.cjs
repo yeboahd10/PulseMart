@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const { FieldValue, getDb } = require('./_shared/firebase-admin.cjs')
+const { sendArkeselSms } = require('./_shared/arkesel-sms.cjs')
 
 const JSON_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -56,6 +57,37 @@ const buildEventId = (payload) => crypto
     status: payload.data?.status || payload.data?.orderStatus || ''
   }))
   .digest('hex')
+
+const resolveAccountName = (purchaseData, userData) => String(
+  purchaseData?.accountName ||
+  purchaseData?.userName ||
+  purchaseData?.name ||
+  userData?.fullName ||
+  userData?.name ||
+  userData?.displayName ||
+  'Customer'
+).trim() || 'Customer'
+
+const resolveAccountPhone = (purchaseData, userData) => (
+  purchaseData?.accountPhone ||
+  purchaseData?.phoneNumber ||
+  purchaseData?.phone ||
+  userData?.phoneNumber ||
+  userData?.phone ||
+  ''
+)
+
+const resolveCapacityLabel = (purchaseData) => {
+  const raw = String(
+    purchaseData?.capacityLabel ||
+    purchaseData?.capacity ||
+    purchaseData?.bundle ||
+    ''
+  ).trim()
+  if (!raw) return 'your selected bundle'
+  if (/^\d+$/.test(raw)) return `${raw}MB`
+  return raw
+}
 
 const findPurchaseDoc = async (db, orderReference, transactionReference) => {
   const purchases = db.collection('purchases')
@@ -187,6 +219,42 @@ exports.handler = async (event) => {
 
     if (purchaseDoc) {
       await purchaseDoc.ref.set(purchaseUpdate, { merge: true })
+
+      if (orderStatus === 'completed') {
+        const purchaseData = { ...(purchaseDoc.data() || {}), ...purchaseUpdate }
+        if (!purchaseData.smsDeliveredSentAt) {
+          let userData = {}
+          if (purchaseData.userId) {
+            try {
+              const userSnap = await db.collection('users').doc(String(purchaseData.userId)).get()
+              if (userSnap.exists) userData = userSnap.data() || {}
+            } catch (userErr) {
+              console.warn('datamart-webhook: failed to read user for delivery SMS', userErr)
+            }
+          }
+
+          const accountName = resolveAccountName(purchaseData, userData)
+          const capacityLabel = resolveCapacityLabel(purchaseData)
+          const recipient = resolveAccountPhone(purchaseData, userData)
+          const message = `Hello ${accountName}, your order of ${capacityLabel} has been delivered.`
+          const smsResult = await sendArkeselSms({ to: recipient, message })
+
+          await purchaseDoc.ref.set({
+            smsDeliveredLastAttemptAt: FieldValue.serverTimestamp(),
+            smsDeliveredLastResult: smsResult,
+            ...(smsResult.ok
+              ? {
+                  smsDeliveredSentAt: FieldValue.serverTimestamp(),
+                  smsDeliveredRecipient: recipient
+                }
+              : {})
+          }, { merge: true })
+
+          if (!smsResult.ok && !smsResult.skipped) {
+            console.warn('datamart-webhook: delivered SMS failed', smsResult)
+          }
+        }
+      }
     }
 
     if (markerDoc) {

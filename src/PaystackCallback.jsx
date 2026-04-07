@@ -143,6 +143,11 @@ const PaystackCallback = () => {
                   phoneNumber: purchaseMeta.phoneNumber || purchaseMeta.phone || '',
                   network: purchaseMeta.network || '',
                   capacity: purchaseMeta.capacity || purchaseMeta.size || purchaseMeta.bundle || '',
+                  capacityLabel: purchaseMeta.capacityLabel || purchaseMeta.capacity || purchaseMeta.size || purchaseMeta.bundle || '',
+                  accountName: purchaseMeta.accountName || user?.fullName || user?.name || user?.displayName || 'Customer',
+                  accountPhone: purchaseMeta.accountPhone || user?.phoneNumber || user?.phone || purchaseMeta.phoneNumber || purchaseMeta.phone || '',
+                  userId: userRef.id || (fbUser && fbUser.uid) || null,
+                  userName: purchaseMeta.accountName || user?.fullName || user?.name || user?.displayName || 'Customer',
                   gateway: 'wallet'
                 }
 
@@ -192,6 +197,9 @@ const PaystackCallback = () => {
                         network: purchaseMeta.network || '',
                         phoneNumber: purchaseMeta.phoneNumber || purchaseMeta.phone || '',
                         capacity: purchaseMeta.capacity || purchaseMeta.size || purchaseMeta.bundle || '',
+                        capacityLabel: purchaseMeta.capacityLabel || purchaseMeta.capacity || purchaseMeta.size || purchaseMeta.bundle || '',
+                        accountName: purchaseMeta.accountName || user?.fullName || user?.name || user?.displayName || 'Customer',
+                        accountPhone: purchaseMeta.accountPhone || user?.phoneNumber || user?.phone || purchaseMeta.phoneNumber || purchaseMeta.phone || '',
                         price: Number(displayPrice) || 0,
                         displayPrice: Number(displayPrice) || 0,
                         orderReference,

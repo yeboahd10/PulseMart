@@ -1,5 +1,6 @@
 const axios = require('axios')
 const crypto = require('crypto')
+const { sendArkeselSms } = require('./_shared/arkesel-sms.cjs')
 // In-memory map to avoid duplicate processing within the same function instance
 // Keys are idempotency keys (prefer Paystack reference when available, otherwise payload hash)
 const processedRefs = new Map()
@@ -62,6 +63,26 @@ const normalizePurchaseResponse = (upstreamData, fallbackRequestId) => {
       raw
     }
   }
+}
+
+const resolveAccountName = (body) => String(
+  body?.accountName || body?.userName || body?.name || 'Customer'
+).trim() || 'Customer'
+
+const resolveCapacityLabel = (body, normalizedCapacity) => {
+  const raw = String(body?.capacityLabel || '').trim()
+  if (raw) return raw
+  const digits = String(normalizedCapacity || '').replace(/\D/g, '')
+  if (!digits) return 'your selected bundle'
+  return `${digits}MB`
+}
+
+const sendOrderPlacedSms = async (body, normalizedCapacity) => {
+  const recipient = body?.accountPhone || body?.phoneNumber || body?.phone || ''
+  const accountName = resolveAccountName(body)
+  const capacityLabel = resolveCapacityLabel(body, normalizedCapacity)
+  const message = `Hello ${accountName}, your order of ${capacityLabel} was placed successfully.`
+  return sendArkeselSms({ to: recipient, message })
 }
 
 exports.handler = async (event) => {
@@ -197,6 +218,17 @@ exports.handler = async (event) => {
 
         const resp = await axios.post(purchaseUrl, hubnetPayload, { headers, timeout: 15000 })
         const normalized = normalizePurchaseResponse(resp.data, requestId)
+        if (normalized.success) {
+          const smsResult = await sendOrderPlacedSms(body, capacity)
+          normalized.sms = {
+            orderPlaced: smsResult.ok ? 'sent' : 'failed',
+            skipped: Boolean(smsResult.skipped),
+            reason: smsResult.reason || null
+          }
+          if (!smsResult.ok && !smsResult.skipped) {
+            console.warn('purchase-proxy: order-placed SMS failed', smsResult)
+          }
+        }
 
         processedRefs.set(idempotencyKey, { ts: Date.now(), status: resp.status || 200, response: normalized })
         console.log('purchase-proxy: upstream response', { status: resp.status })
@@ -214,6 +246,17 @@ exports.handler = async (event) => {
 
     const resp = await axios.post(purchaseUrl, hubnetPayload, { headers, timeout: 15000 })
     const normalized = normalizePurchaseResponse(resp.data, requestId)
+    if (normalized.success) {
+      const smsResult = await sendOrderPlacedSms(body, capacity)
+      normalized.sms = {
+        orderPlaced: smsResult.ok ? 'sent' : 'failed',
+        skipped: Boolean(smsResult.skipped),
+        reason: smsResult.reason || null
+      }
+      if (!smsResult.ok && !smsResult.skipped) {
+        console.warn('purchase-proxy: order-placed SMS failed', smsResult)
+      }
+    }
 
     console.log('purchase-proxy: upstream response', { status: resp.status })
 

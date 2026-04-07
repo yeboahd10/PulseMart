@@ -54,6 +54,8 @@ const Telecel = () => {
 
     const displayPrice = Number(b.price) || 0
     const userBalance = Number(user?.balance ?? user?.wallet ?? 0)
+    const accountName = String(user?.fullName || user?.name || user?.displayName || 'Customer').trim() || 'Customer'
+    const accountPhone = String(user?.phoneNumber || user?.phone || '').trim()
     if (user && userBalance < displayPrice) {
       const shortfall = Number((displayPrice - userBalance).toFixed(2))
       const fee = Number((shortfall * 0.02).toFixed(2))
@@ -73,7 +75,11 @@ const Telecel = () => {
             phoneNumber: phone,
             network: mapNetwork(b.network || 'Telecel'),
             capacity: capacity,
+            capacityLabel: b.dataAmount,
             displayPrice: displayPrice,
+            accountName,
+            accountPhone,
+            userId: user?.uid ?? null,
             shortfall,
             fee
           }
@@ -94,7 +100,17 @@ const Telecel = () => {
     const actualPrice = Number(b.apiPrice ?? b.price ?? 0)
 
     const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
-    const payload = { phoneNumber: phone, network: mapNetwork(b.network || 'Telecel'), capacity, gateway: 'wallet' }
+    const payload = {
+      phoneNumber: phone,
+      network: mapNetwork(b.network || 'Telecel'),
+      capacity,
+      capacityLabel: b.dataAmount,
+      accountName,
+      accountPhone,
+      userId: user?.uid ?? null,
+      userName: accountName,
+      gateway: 'wallet'
+    }
     const headers = { 'Content-Type': 'application/json' }
     if (apiKey) headers['X-API-Key'] = apiKey
     axios.post(purchaseUrl, payload, { headers })
@@ -120,6 +136,9 @@ const Telecel = () => {
               network: b.network,
               phoneNumber: phone,
               capacity: b.dataAmount,
+              capacityLabel: b.dataAmount,
+              accountName,
+              accountPhone,
               // include local/display price fields so Dashboard shows UI prices
               price: actualPrice,
               displayPrice: Number(b.price) || 0,

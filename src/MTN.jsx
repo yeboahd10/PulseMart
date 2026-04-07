@@ -67,6 +67,8 @@ const MTN = () => {
 
     const displayPrice = Number(b.price) || 0
     const userBalance = Number(user?.balance ?? user?.wallet ?? 0)
+    const accountName = String(user?.fullName || user?.name || user?.displayName || 'Customer').trim() || 'Customer'
+    const accountPhone = String(user?.phoneNumber || user?.phone || '').trim()
 
     // if user's balance is less than local display price, trigger Paystack
     if (user && userBalance < displayPrice) {
@@ -90,7 +92,11 @@ const MTN = () => {
             phoneNumber: phone,
             network: mapNetwork(b.network),
             capacity: capacity,
+            capacityLabel: b.dataAmount,
             displayPrice: displayPrice,
+            accountName,
+            accountPhone,
+            userId: user?.uid ?? null,
             shortfall,
             fee
           }
@@ -118,6 +124,11 @@ const MTN = () => {
       phoneNumber: phone,
       network: mapNetwork(b.network),
       capacity: capacity,
+      capacityLabel: b.dataAmount,
+      accountName,
+      accountPhone,
+      userId: user?.uid ?? null,
+      userName: accountName,
       gateway: 'wallet'
     };
 
@@ -147,6 +158,9 @@ const MTN = () => {
               network: b.network,
               phoneNumber: phone,
               capacity: b.dataAmount,
+              capacityLabel: b.dataAmount,
+              accountName,
+              accountPhone,
               // store both API price and local/display price so dashboard shows local prices
               price: actualPrice,
               displayPrice: Number(b.price) || 0,
