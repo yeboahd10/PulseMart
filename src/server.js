@@ -115,20 +115,30 @@ app.post("/api/purchase", async (req, res) => {
   }
 
   try {
-    const apiKey = process.env.VITE_API_KEY || process.env.API_KEY || '1328d6ca20df1cd3a7dee10dcbbb99a65d09ceefd85ce57dfa45d5a1dbc31df0';
+    const apiKey = process.env.HUBNET_API_KEY || process.env.VITE_API_KEY || process.env.API_KEY || '';
     const _mask = (k) => {
       if (!k) return 'MISSING';
       try { if (k.length <= 8) return '*'.repeat(k.length); return `${k.slice(0,4)}...${k.slice(-4)}` } catch (e) { return 'ERROR' }
     }
     console.log('Server resolved API key:', _mask(apiKey));
 
+    const normalizeNetwork = (value) => {
+      const s = String(value || '').toLowerCase()
+      if (s.includes('mtn') || s.includes('yello')) return 'mtn'
+      if (s.includes('telecel') || s.includes('vodafone')) return 'telecel'
+      if (s.includes('airtel') || s.includes('tigo') || s === 'at' || s.includes('at_premium')) return 'airteltigo'
+      return s
+    }
+
+    const requestId = `req_${Date.now()}`
     const response = await axios.post(
-      "https://api.datamartgh.shop/api/developer/purchase",
+      `${String(process.env.HUBNET_BASE_URL || 'https://hubnetgh.site/wp-json/hubnet-api/v1').replace(/\/$/, '')}/place_order`,
       {
-        phoneNumber,
-        network,
-        capacity,
-        gateway: "wallet"
+        customer_number: String(phoneNumber),
+        network: normalizeNetwork(network),
+        volume: String(capacity).replace(/[^0-9]/g, ''),
+        quantity: 1,
+        request_id: requestId
       },
       {
         headers: {
@@ -137,7 +147,23 @@ app.post("/api/purchase", async (req, res) => {
       }
     );
 
-    res.status(201).json(response.data);
+    const payload = response.data || {}
+    const success = payload.success === true || String(payload.status || '').toLowerCase() === 'success'
+    const orderReference = String(payload.order_id || requestId)
+
+    res.status(201).json({
+      success,
+      status: success ? 'success' : 'failed',
+      message: payload.message || (success ? 'Order placed successfully' : 'Order placement failed'),
+      orderReference,
+      transactionReference: orderReference,
+      data: {
+        status: success ? 'success' : 'failed',
+        orderStatus: success ? 'pending' : 'failed',
+        orderReference,
+        raw: payload
+      }
+    });
   } catch (error) {
     console.error('Purchase proxy error details:', {
       message: error.message,

@@ -8,16 +8,27 @@ const CORS_HEADERS = {
 }
 
 const resolveApiKey = () => (
-  process.env.DATAMART_API_KEY ||
+  process.env.HUBNET_API_KEY ||
   process.env.API_KEY ||
   process.env.VITE_API_KEY ||
   ''
 )
 
 const resolveBaseUrl = () => (
-  process.env.DATAMART_BASE_URL ||
-  'https://api.datamartgh.shop/api/developer'
+  process.env.HUBNET_BASE_URL ||
+  process.env.VITE_HUBNET_BASE_URL ||
+  'https://hubnetgh.site/wp-json/hubnet-api/v1'
 )
+
+const normalizeStatus = (value) => {
+  const s = String(value || '').trim().toLowerCase()
+  if (!s) return 'pending'
+  if (s === 'success' || s === 'completed' || s === 'delivered' || s === 'sent') return 'completed'
+  if (s === 'failed' || s === 'cancelled' || s === 'error') return 'failed'
+  if (s === 'processing') return 'processing'
+  if (s === 'queued' || s === 'waiting') return 'waiting'
+  return s
+}
 
 exports.handler = async (event) => {
   try {
@@ -32,6 +43,7 @@ exports.handler = async (event) => {
     const reference = String(
       event.queryStringParameters?.reference ||
       event.queryStringParameters?.orderReference ||
+      event.queryStringParameters?.order_id ||
       ''
     ).trim()
 
@@ -41,11 +53,12 @@ exports.handler = async (event) => {
 
     const apiKey = resolveApiKey()
     if (!apiKey) {
-      return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Datamart API key not configured' }) }
+      return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Hubnet API key not configured' }) }
     }
 
     const baseUrl = resolveBaseUrl().replace(/\/$/, '')
-    const upstream = await axios.get(`${baseUrl}/order-status/${encodeURIComponent(reference)}`, {
+    const upstream = await axios.get(`${baseUrl}/order_status`, {
+      params: { order_id: reference },
       headers: {
         'X-API-Key': apiKey,
         Accept: 'application/json'
@@ -54,18 +67,28 @@ exports.handler = async (event) => {
     })
 
     const payload = upstream.data || {}
-    const data = payload.data || {}
-    const rawStatus = data.orderStatus || data.status || payload.orderStatus || payload.status || ''
+    const rawStatus = payload.status || payload.order_status || payload.status_label || ''
+    const orderStatus = normalizeStatus(rawStatus)
+    const updatedAt = payload.updated_at || payload.created_at || payload.date || null
+    const normalizedReference = String(payload.order_id || reference)
 
     return {
       statusCode: upstream.status || 200,
       headers: CORS_HEADERS,
       body: JSON.stringify({
+        success: payload.success !== false,
         ...payload,
+        data: {
+          orderStatus,
+          status: orderStatus,
+          updatedAt,
+          reference: normalizedReference,
+          orderReference: normalizedReference
+        },
         normalized: {
-          reference: data.reference || data.orderReference || reference,
-          orderStatus: String(rawStatus || '').toLowerCase(),
-          updatedAt: data.updatedAt || null
+          reference: normalizedReference,
+          orderStatus,
+          updatedAt
         }
       })
     }

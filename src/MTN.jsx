@@ -110,12 +110,7 @@ const MTN = () => {
     }
 
     // require API price for purchase (only after wallet/Paystack handling)
-    const actualPrice = b.apiPrice ?? null
-    if (!actualPrice) {
-      alert('Cannot purchase: price not available from API for this bundle')
-      setPlacing(false)
-      return
-    }
+    const actualPrice = Number(b.apiPrice ?? b.price ?? 0)
 
     const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
 
@@ -137,6 +132,7 @@ const MTN = () => {
         if (success) {
           const purchaseId = resp?.purchaseId || resp?.id || resp?.data?.id || resp?.transactionId || resp?.txId || null
           const transactionReference = resp?.transactionReference || resp?.transaction_ref || resp?.tx_ref || resp?.reference || resp?.data?.transactionReference || null
+          const orderReference = resp?.orderReference || resp?.order_reference || resp?.order_id || resp?.data?.orderReference || resp?.data?.order_reference || resp?.data?.order_id || transactionReference || purchaseId || null
           setSuccessInfo({ purchaseId, transactionReference })
           setSuccessModalOpen(true)
           setPlacing(false)
@@ -145,6 +141,7 @@ const MTN = () => {
             await addDoc(collection(db, 'purchases'), {
               userId: user?.uid ?? null,
               purchaseId,
+              orderReference,
               transactionReference: transactionReference || purchaseId || resp?.data?.reference || resp?.data?.transactionReference || resp?.data?.id || '',
               rawResponse: resp,
               network: b.network,

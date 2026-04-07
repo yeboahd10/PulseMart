@@ -1,13 +1,64 @@
 const axios = require('axios')
+const crypto = require('crypto')
 // In-memory map to avoid duplicate processing within the same function instance
+// Keys are idempotency keys (prefer Paystack reference when available, otherwise payload hash)
 const processedRefs = new Map()
 const CACHE_TTL = 5 * 60 * 1000 // keep recent responses for 5 minutes
+const LOCK_TTL = 2 * 60 * 1000 // keep in-progress lock for 2 minutes to avoid races
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Content-Type': 'application/json'
+}
+
+const resolveHubnetBaseUrl = () => (
+  process.env.HUBNET_BASE_URL ||
+  process.env.VITE_HUBNET_BASE_URL ||
+  'https://hubnetgh.site/wp-json/hubnet-api/v1'
+)
+
+const resolveApiKey = () => (
+  process.env.HUBNET_API_KEY ||
+  process.env.VITE_API_KEY ||
+  process.env.API_KEY ||
+  ''
+)
+
+const normalizeNetwork = (net) => {
+  const s = String(net || '').trim().toLowerCase()
+  if (!s) return ''
+  if (s === 'mtn' || s === 'yello' || s.includes('mtn') || s.includes('yello')) return 'mtn'
+  if (s.includes('telecel') || s.includes('vodafone')) return 'telecel'
+  if (s === 'at' || s.includes('airtel') || s.includes('tigo') || s.includes('at_premium')) return 'airteltigo'
+  return s
+}
+
+const normalizePurchaseResponse = (upstreamData, fallbackRequestId) => {
+  const raw = upstreamData || {}
+  const success = raw?.success === true || String(raw?.status || '').toLowerCase() === 'success'
+  const orderId = raw?.order_id || raw?.orderId || raw?.id || null
+  const orderReference = String(orderId || fallbackRequestId || '').trim() || null
+  const total = Number(raw?.total || raw?.amount || 0) || null
+
+  return {
+    success,
+    status: success ? 'success' : 'failed',
+    message: String(raw?.message || (success ? 'Order placed successfully' : 'Order placement failed')),
+    order_id: orderId,
+    orderReference,
+    transactionReference: orderReference,
+    total,
+    data: {
+      status: success ? 'success' : 'failed',
+      orderStatus: success ? 'pending' : 'failed',
+      orderReference,
+      transactionReference: orderReference,
+      total,
+      raw
+    }
+  }
 }
 
 exports.handler = async (event) => {
@@ -26,15 +77,6 @@ exports.handler = async (event) => {
 
     const body = event.body ? JSON.parse(event.body) : {}
 
-    const normalizeNetwork = (net) => {
-      if (!net) return net
-      const s = String(net).toUpperCase()
-      if (s === 'AT' || s.includes('AIRTEL') || s.includes('TIGO') || s.includes('AT_PREMIUM')) return 'AT_PREMIUM'
-      if (s === 'MTN' || s === 'YELLO' || s.includes('YELLO')) return 'YELLO'
-      if (s.includes('TELECEL')) return 'TELECEL'
-      return s
-    }
-
     const phoneNumber = body.phoneNumber || body.phone || body.msisdn || ''
     let network = body.network || body.net || ''
     let capacity = body.capacity || body.size || body.data || ''
@@ -50,10 +92,31 @@ exports.handler = async (event) => {
     body.network = network
     body.capacity = String(capacity)
 
-    const purchaseUrl = process.env.VITE_API_PURCHASE || process.env.API_PURCHASE || process.env.PURCHASE_URL || 'https://api.datamartgh.shop/api/developer/purchase'
+    const requestId = String(body.request_id || body.requestId || body.paystackReference || body.reference || `req_${Date.now()}`).trim()
+
+    const hubnetPayload = {
+      network,
+      volume: String(capacity),
+      customer_number: String(phoneNumber),
+      quantity: Number(body.quantity || 1) || 1,
+      request_id: requestId
+    }
+
+    const buildPayloadKey = (obj) => {
+      try {
+        const hash = crypto.createHash('sha256')
+        const s = `${String(obj.customer_number || '')}:${String(obj.network || '')}:${String(obj.volume || '')}:${String(obj.quantity || '')}:${String(obj.request_id || '')}`
+        hash.update(s)
+        return hash.digest('hex')
+      } catch (e) {
+        return null
+      }
+    }
+
+    const purchaseUrl = `${resolveHubnetBaseUrl().replace(/\/$/, '')}/place_order`
     if (!purchaseUrl) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase API URL not configured' }) }
 
-    const secretApiKey = process.env.VITE_API_KEY || process.env.API_KEY || ''
+    const secretApiKey = resolveApiKey()
     const headers = { 'Content-Type': 'application/json' }
     if (secretApiKey) headers['X-API-Key'] = secretApiKey
 
@@ -66,13 +129,18 @@ exports.handler = async (event) => {
     })
 
     const paystackRef = String(body.paystackReference || body.reference || body.transactionReference || body.tx_ref || body.paymentReference || '').trim() || null
+    const idempotencyKey = paystackRef || buildPayloadKey(hubnetPayload) || `key_${Date.now()}_${Math.random().toString(36).slice(2)}`
+
+    const cached = processedRefs.get(idempotencyKey)
+    if (cached && (Date.now() - cached.ts) < CACHE_TTL) {
+      return { statusCode: cached.status || 200, headers: CORS_HEADERS, body: JSON.stringify(cached.response) }
+    }
+
+    if (cached && cached.lock && (Date.now() - cached.lock) < LOCK_TTL) {
+      return { statusCode: 202, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Request is already being processed' }) }
+    }
 
     if (paystackRef) {
-      const cached = processedRefs.get(paystackRef)
-      if (cached && (Date.now() - cached.ts) < CACHE_TTL) {
-        return { statusCode: cached.status || 200, headers: CORS_HEADERS, body: JSON.stringify(cached.response) }
-      }
-
       try {
         const secret = (process.env.PAYSTACK_SECRET_KEY || process.env.API_PAYSTACK_SECRET_KEY || '')
         if (!secret) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'PAYSTACK_SECRET_KEY not configured' }) }
@@ -97,30 +165,32 @@ exports.handler = async (event) => {
           }
         }
 
-        processedRefs.set(paystackRef, { ts: Date.now(), status: 202, response: { message: 'Processing purchase' } })
+        processedRefs.set(idempotencyKey, { ts: Date.now(), lock: Date.now(), status: 202, response: { message: 'Processing purchase' } })
 
-        headers['Idempotency-Key'] = paystackRef
-        body.transactionReference = paystackRef
+        headers['Idempotency-Key'] = idempotencyKey
 
-        const resp = await axios.post(purchaseUrl, body, { headers, timeout: 15000 })
+        const resp = await axios.post(purchaseUrl, hubnetPayload, { headers, timeout: 15000 })
+        const normalized = normalizePurchaseResponse(resp.data, requestId)
 
-        processedRefs.set(paystackRef, { ts: Date.now(), status: resp.status || 200, response: resp.data })
+        processedRefs.set(idempotencyKey, { ts: Date.now(), status: resp.status || 200, response: normalized })
         console.log('purchase-proxy: upstream response', { status: resp.status })
-        return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(resp.data) }
+        return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(normalized) }
       } catch (err) {
-        processedRefs.delete(paystackRef)
+        const prev = processedRefs.get(idempotencyKey) || {}
+        processedRefs.set(idempotencyKey, { ...prev, ts: Date.now() })
         console.error('purchase-proxy paystack-verified error', err.message || err)
-        const status = err.response && err.response.status || 500
-        const data = err.response && err.response.data || { message: err.message }
+        const status = err.response?.status || 500
+        const data = err.response?.data || { message: err.message }
         return { statusCode: status, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase proxy failed', error: data }) }
       }
     }
 
-    const resp = await axios.post(purchaseUrl, body, { headers, timeout: 15000 })
+    const resp = await axios.post(purchaseUrl, hubnetPayload, { headers, timeout: 15000 })
+    const normalized = normalizePurchaseResponse(resp.data, requestId)
 
     console.log('purchase-proxy: upstream response', { status: resp.status })
 
-    return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(resp.data) }
+    return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(normalized) }
   } catch (err) {
     console.error('purchase-proxy error', {
       message: err.message,

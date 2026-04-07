@@ -38,7 +38,10 @@ const statusMeta = (status) => {
 }
 
 const DATAMART_STATUS_CACHE_KEY = 'datamart_status_cache_v1'
-const TRACKER_ACTIVITY_CACHE_KEY = 'datamart_tracker_last_activity_v1'
+const ORDER_STATUS_POLL_INTERVAL_MS = 30000
+const ORDER_STATUS_RECENT_WINDOW_MS = 2 * 60 * 60 * 1000
+const MAX_ORDER_STATUS_POLLS = 8
+const TERMINAL_ORDER_STATUSES = new Set(['completed', 'failed', 'refunded'])
 
 const loadDatamartStatusCache = () => {
   if (typeof window === 'undefined') return {}
@@ -60,50 +63,11 @@ const saveDatamartStatusCache = (cache) => {
   }
 }
 
-const loadTrackerActivityCache = () => {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(TRACKER_ACTIVITY_CACHE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-const saveTrackerActivityCache = (tracker, lastActiveAt) => {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(TRACKER_ACTIVITY_CACHE_KEY, JSON.stringify({
-      tracker: tracker || null,
-      lastActiveAt: lastActiveAt || null
-    }))
-  } catch {
-    // ignore localStorage failures
-  }
-}
-
-const formatTrackerTime = (value) => {
-  if (!value) return null
+const parseTimeValue = (value) => {
+  if (!value) return 0
   const date = (typeof value === 'number') ? new Date(value) : new Date(String(value))
-  if (Number.isNaN(date.getTime())) return null
-  return new Intl.DateTimeFormat('en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-    timeZone: 'Africa/Accra'
-  }).format(date)
-}
-
-const getInitialTrackerData = () => {
-  const cached = loadTrackerActivityCache()
-  if (!cached) return null
-  // backward compatibility with old cache shape where payload was stored directly
-  if (cached?.tracker) return cached.tracker
-  return cached
-}
-
-const getInitialTrackerLastActiveAt = () => {
-  const cached = loadTrackerActivityCache()
-  return cached?.lastActiveAt || null
+  const time = date.getTime()
+  return Number.isNaN(time) ? 0 : time
 }
 
 const Dashboard = () => {
@@ -124,11 +88,9 @@ const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [showAllOrders, setShowAllOrders] = useState(false)
   const [orderStatusMap, setOrderStatusMap] = useState({})
-  const [trackerData, setTrackerData] = useState(() => getInitialTrackerData())
-  const [trackerLastActiveAt, setTrackerLastActiveAt] = useState(() => getInitialTrackerLastActiveAt())
-  const [trackerLoading, setTrackerLoading] = useState(false)
-  const [trackerError, setTrackerError] = useState('')
   const orderStatusMapRef = useRef({})
+  const ordersRef = useRef([])
+  const lastOrderStatusSyncAtRef = useRef(0)
   const datamartStatusCacheRef = useRef(loadDatamartStatusCache())
   
   const [searchParams, setSearchParams] = useSearchParams()
@@ -198,28 +160,37 @@ const Dashboard = () => {
   }, [orderStatusMap])
 
   useEffect(() => {
+    ordersRef.current = orders
+  }, [orders])
+
+  useEffect(() => {
     if (!user?.uid) { setOrders([]); return }
     try {
       const purchasesRef = collection(db, 'purchases')
 
       const mapSnap = (snap) => snap.docs.map(d => {
         const data = d.data() || {}
-        const orderReference = data.orderReference || data.order_reference || data.reference || data.rawResponse?.data?.orderReference || data.rawResponse?.orderReference || ''
+        const rawResponse = data.rawResponse || data.raw || {}
+        const responseData = rawResponse?.data || {}
+        const upstreamData = responseData?.raw || rawResponse?.result || {}
+        const orderReference = data.orderReference || data.order_reference || data.reference || data.purchaseId || responseData?.orderReference || responseData?.order_reference || rawResponse?.orderReference || rawResponse?.order_id || upstreamData?.order_id || upstreamData?.id || ''
         const cacheKey = orderReference || d.id
         const cached = datamartStatusCacheRef.current[cacheKey] || null
         const rawPrice = data.displayPrice ?? data.display_price ?? data.uiPrice ?? data.localPrice ?? data.price ?? data.amount ?? 0
         const displayPrice = Number(rawPrice || 0)
         const legacySuccess = !orderReference && (
-          String(data.rawResponse?.status || '').toLowerCase() === 'success' ||
-          String(data.raw?.status || '').toLowerCase() === 'success' ||
+          String(rawResponse?.status || '').toLowerCase() === 'success' ||
+          String(responseData?.status || '').toLowerCase() === 'success' ||
+          String(upstreamData?.status || '').toLowerCase() === 'success' ||
           String(data.status || '').toLowerCase() === 'success' ||
           String(data.tx_status || '').toLowerCase() === 'success' ||
           String(data.txStatus || '').toLowerCase() === 'success'
         )
-        // Use only Datamart-specific order status fields — NOT the Paystack/HTTP success flag from rawResponse.status
         const rawStatus = data.orderStatus || data.order_status ||
-          data.rawResponse?.data?.orderStatus || data.rawResponse?.orderStatus ||
-          data.raw?.data?.orderStatus || data.raw?.orderStatus || cached?.status || (legacySuccess ? 'completed' : '')
+          responseData?.orderStatus || responseData?.order_status || responseData?.status ||
+          rawResponse?.orderStatus || rawResponse?.order_status || rawResponse?.status_label ||
+          upstreamData?.order_status || upstreamData?.status || upstreamData?.status_label ||
+          cached?.status || (legacySuccess ? 'completed' : '')
         const status = normalizeOrderStatus(rawStatus || '')
         const statusUpdatedAt = data.orderStatusUpdatedAt || data.statusUpdatedAt || cached?.updatedAt || null
 
@@ -240,12 +211,12 @@ const Dashboard = () => {
 
         return {
           id: d.id,
-          networkNumber: `${data.network || ''} • ${data.phoneNumber || data.phone || ''}`.trim(),
-          phoneNumber: data.phoneNumber || data.phone || data.msisdn || '',
-          dataAmount: data.capacity || data.size || data.bundle || '',
+          networkNumber: `${data.network || rawResponse?.network || upstreamData?.network || ''} • ${data.phoneNumber || data.phone || data.msisdn || rawResponse?.customer_number || upstreamData?.customer_number || ''}`.trim(),
+          phoneNumber: data.phoneNumber || data.phone || data.msisdn || rawResponse?.customer_number || upstreamData?.customer_number || '',
+          dataAmount: data.capacity || data.size || data.bundle || rawResponse?.volume || upstreamData?.volume || '',
           price: displayPrice.toFixed(2),
           orderReference,
-          transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.reference || data.transactionId || data.txId || data.id || '',
+          transactionId: data.transactionReference || data.transaction_ref || data.tx_ref || data.reference || data.transactionId || data.txId || data.purchaseId || data.id || responseData?.transactionReference || rawResponse?.transactionReference || orderReference || '',
           status,
           statusUpdatedAt,
           createdAt: createdAtDate,
@@ -306,15 +277,32 @@ const Dashboard = () => {
     let active = true
     let intervalId
 
-    const syncOrderStatuses = async () => {
-      // Poll ALL orders that have an orderReference — API response is the source of truth.
-      // Never skip based on local status since local status can be wrong (e.g. Paystack
-      // "success" mistaken for delivery completion). Once API returns completed/failed/refunded
-      // the orderStatusMap entry will stay correct and polling stops naturally via the
-      // active flag / interval cleanup when all map entries are terminal.
-      const candidates = orders.filter((o) => !!o.orderReference)
+    const shouldPollOrder = (order) => {
+      if (!order?.orderReference) return false
+
+      const effectiveStatus = normalizeOrderStatus(orderStatusMapRef.current[order.id]?.status || order.status)
+      if (!TERMINAL_ORDER_STATUSES.has(effectiveStatus)) return true
+
+      const recentCutoff = Date.now() - ORDER_STATUS_RECENT_WINDOW_MS
+      const createdAtMs = order.createdAt instanceof Date ? order.createdAt.getTime() : 0
+      const updatedAtMs = parseTimeValue(orderStatusMapRef.current[order.id]?.updatedAt || order.statusUpdatedAt)
+      return Math.max(createdAtMs, updatedAtMs) >= recentCutoff
+    }
+
+    const syncOrderStatuses = async (force = false) => {
+      const now = Date.now()
+      if (!force && (now - lastOrderStatusSyncAtRef.current) < ORDER_STATUS_POLL_INTERVAL_MS) {
+        return
+      }
+
+      const currentOrders = ordersRef.current
+      const candidates = currentOrders
+        .filter(shouldPollOrder)
+        .slice(0, MAX_ORDER_STATUS_POLLS)
 
       if (!candidates.length) return
+
+      lastOrderStatusSyncAtRef.current = now
 
       try {
         const responses = await Promise.all(candidates.map(async (o) => {
@@ -372,112 +360,18 @@ const Dashboard = () => {
       }
     }
 
-    syncOrderStatuses()
-    intervalId = setInterval(syncOrderStatuses, 15000)
+    syncOrderStatuses(true)
+    intervalId = setInterval(() => {
+      void syncOrderStatuses()
+    }, ORDER_STATUS_POLL_INTERVAL_MS)
 
     return () => {
       active = false
       if (intervalId) clearInterval(intervalId)
     }
-  }, [orders])
-
-  useEffect(() => {
-    if (!['wallet', 'orders'].includes(selected)) return
-
-    let active = true
-    let intervalId
-
-    const hasTrackerActivity = (tracker) => {
-      const scanner = tracker?.scanner || {}
-      const activeScanner = Boolean(scanner.active || scanner.waiting)
-      const hasDetails = Boolean(
-        tracker?.checkingNow?.summary ||
-        tracker?.lastDelivered?.summary
-      )
-      const hasUserOrders = Array.isArray(tracker?.yourOrders) && tracker.yourOrders.length > 0
-      return activeScanner || hasDetails || hasUserOrders
-    }
-
-    const fetchTracker = async () => {
-      setTrackerLoading(true)
-      setTrackerError('')
-      try {
-        const resp = await fetch('/.netlify/functions/delivery-tracker')
-        if (resp.status === 429) {
-          // Rate limited — keep showing last data silently, don't clear it
-          return
-        }
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        const body = await resp.json()
-        if (!active) return
-        const nextTracker = body?.normalized || body?.data || null
-        const isActivePayload = hasTrackerActivity(nextTracker)
-        if (isActivePayload) {
-          const ts = Date.now()
-          setTrackerLastActiveAt(ts)
-          saveTrackerActivityCache(nextTracker, ts)
-        }
-        setTrackerData((prev) => {
-          if (!isActivePayload && prev) {
-            // Keep showing last meaningful tracker payload until new activity appears.
-            return prev
-          }
-          return nextTracker
-        })
-      } catch (err) {
-        if (!active) return
-        setTrackerError(String(err?.message || 'Failed to load tracker'))
-      } finally {
-        if (active) {
-          setTrackerLoading(false)
-        }
-      }
-    }
-
-    fetchTracker()
-    // Poll every 30s for quicker transition out of idle while relying on server cache.
-    intervalId = setInterval(fetchTracker, 30000)
-
-    return () => {
-      active = false
-      if (intervalId) clearInterval(intervalId)
-    }
-  }, [selected])
+  }, [orders.length])
 
   const getEffectiveStatus = (order) => normalizeOrderStatus(orderStatusMap[order.id]?.status || order.status)
-
-  const renderTrackerCard = () => {
-    const scanner = trackerData?.scanner || {}
-    const scannerState = scanner.active ? 'active' : (scanner.waiting ? 'waiting' : 'idle')
-    const stateColor = scannerState === 'active' ? 'bg-green-500' : (scannerState === 'waiting' ? 'bg-yellow-500' : 'bg-slate-400')
-    const lastActiveLabel = formatTrackerTime(trackerLastActiveAt)
-
-    return (
-      <div className="p-3 sm:p-4 rounded-lg border border-slate-200 bg-white">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-lg sm:text-lg text-black font-bold">Delivery Tracker</div>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className={`w-2 h-2 rounded-full ${stateColor}`} />
-            <span className="uppercase">{scannerState}</span>
-          </div>
-        </div>
-
-        {trackerLoading && <div className="mt-2 text-xs text-slate-400">Loading tracker...</div>}
-        {trackerError && <div className="mt-2 text-xs text-red-500">{trackerError}</div>}
-
-        {!trackerLoading && !trackerError && (
-          <div className="mt-3 space-y-2">
-            {trackerData?.message && <div className="text-xs text-black">{trackerData.message}</div>}
-            {trackerData?.checkingNow?.summary && <div className="text-xs text-black">{trackerData.checkingNow.summary}</div>}
-            {trackerData?.lastDelivered?.summary && <div className="text-xs text-black">{trackerData.lastDelivered.summary}</div>}
-            {lastActiveLabel && (
-              <div className="text-[11px] text-slate-500">Last active update: {lastActiveLabel} GMT</div>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
 
   const hasChanges = () => {
     if (!user) return false
@@ -598,8 +492,6 @@ const Dashboard = () => {
 
                 return (
                   <div className="space-y-4">
-                    {renderTrackerCard()}
-
                     <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 bg-white">
                       <div>
                         <div className="text-sm text-slate-500">Current Balance</div>
@@ -725,10 +617,6 @@ const Dashboard = () => {
         {selected === "orders" && (
           <div className="m-3 p-2 bg-base-100 rounded-box shadow-md">
             <h3 className="font-semibold mb-3 text-2xl">My Orders</h3>
-
-            <div className="mb-3">
-              {renderTrackerCard()}
-            </div>
 
             <div className="flex items-center justify-between mb-3">
               <div className="w-full max-w-md">

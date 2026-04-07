@@ -169,7 +169,7 @@ const PaystackCallback = () => {
                   const resp = purchaseResp?.data || {}
                   const success = resp?.status === 'success' || resp?.success === true || resp?.order_status === 'success' || resp?.data?.status === 'success'
                   if (success) {
-                    const orderReference = resp?.orderReference || resp?.order_reference || resp?.data?.orderReference || resp?.data?.order_reference || null
+                    const orderReference = resp?.orderReference || resp?.order_reference || resp?.order_id || resp?.data?.orderReference || resp?.data?.order_reference || resp?.data?.order_id || null
                     const transactionReference = resp?.transactionReference || resp?.transaction_ref || resp?.tx_ref || resp?.reference || resp?.data?.transactionReference || resp?.data?.reference || null
 
                     // determine display price: prefer metadata.displayPrice, fall back to response fields

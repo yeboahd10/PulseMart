@@ -5,7 +5,7 @@ import { useAuth } from './context/AuthContext'
 import Spinner from './components/Spinner'
 
 const ADMIN_EMAIL = 'akwasiappiah@gmail.com'
-const DEFAULT_NOTICE = 'Good News,Delivery is Going Smoothly. Delivery Tracker is now available for all users. Check it out on the Dashboard to stay updated on your orders!'
+const DEFAULT_NOTICE = 'Good news, purchases and order updates are available in your dashboard.'
 
 const Admin = () => {
   const { user } = useAuth()

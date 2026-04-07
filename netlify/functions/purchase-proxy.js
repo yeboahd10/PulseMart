@@ -13,6 +13,57 @@ const CORS_HEADERS = {
   'Content-Type': 'application/json'
 }
 
+const resolveHubnetBaseUrl = () => (
+  process.env.HUBNET_BASE_URL ||
+  process.env.VITE_HUBNET_BASE_URL ||
+  'https://hubnetgh.site/wp-json/hubnet-api/v1'
+)
+
+const resolveApiKey = () => (
+  process.env.HUBNET_API_KEY ||
+  process.env.VITE_API_KEY ||
+  process.env.API_KEY ||
+  ''
+)
+
+const normalizeNetwork = (net) => {
+  const s = String(net || '').trim().toLowerCase()
+  if (!s) return ''
+  if (s === 'mtn' || s === 'yello' || s.includes('mtn') || s.includes('yello')) return 'mtn'
+  if (s.includes('telecel') || s.includes('vodafone')) return 'telecel'
+  if (s === 'at' || s.includes('airtel') || s.includes('tigo') || s.includes('at_premium')) return 'airteltigo'
+  return s
+}
+
+const normalizePurchaseResponse = (upstreamData, fallbackRequestId) => {
+  const raw = upstreamData || {}
+  const nested = raw?.data || raw?.result || {}
+  const success = raw?.success === true || nested?.success === true || String(raw?.status || '').toLowerCase() === 'success' || String(nested?.status || '').toLowerCase() === 'success'
+  const orderId = raw?.order_id || raw?.orderId || raw?.id || nested?.order_id || nested?.orderId || nested?.id || null
+  const orderReference = String(orderId || fallbackRequestId || '').trim() || null
+  const total = Number(raw?.total || raw?.amount || nested?.total || nested?.amount || 0) || null
+  const message = String(raw?.message || nested?.message || (success ? 'Order placed successfully' : 'Order placement failed'))
+
+  return {
+    success,
+    status: success ? 'success' : 'failed',
+    message,
+    order_id: orderId,
+    orderReference,
+    transactionReference: orderReference,
+    total,
+    data: {
+      status: success ? 'success' : 'failed',
+      orderStatus: success ? 'pending' : 'failed',
+      orderId,
+      orderReference,
+      transactionReference: orderReference,
+      total,
+      raw
+    }
+  }
+}
+
 exports.handler = async (event) => {
   try {
     // Handle preflight
@@ -31,22 +82,10 @@ exports.handler = async (event) => {
 
     const body = event.body ? JSON.parse(event.body) : {}
 
-    // normalize and validate incoming purchase payload to match DataMart API expectations
-    const normalizeNetwork = (net) => {
-      if (!net) return net
-      const s = String(net).toUpperCase()
-      if (s === 'AT' || s.includes('AIRTEL') || s.includes('TIGO') || s.includes('AT_PREMIUM')) return 'AT_PREMIUM'
-      if (s === 'MTN' || s === 'YELLO' || s.includes('YELLO')) return 'YELLO'
-      if (s.includes('TELECEL')) return 'TELECEL'
-      return s
-    }
-
-    // ensure required fields exist and are in the expected format
     const phoneNumber = body.phoneNumber || body.phone || body.msisdn || ''
     let network = body.network || body.net || ''
     let capacity = body.capacity || body.size || body.data || ''
 
-    // coerce capacity to numeric GB string (e.g. '5')
     capacity = String(capacity || '').replace(/[^0-9]/g, '')
     network = normalizeNetwork(network)
 
@@ -54,7 +93,6 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Missing required fields: phoneNumber, network, capacity' }) }
     }
 
-    // replace body fields with normalized values we will forward upstream
     body.phoneNumber = String(phoneNumber)
     body.network = network
     body.capacity = String(capacity)
@@ -72,10 +110,10 @@ exports.handler = async (event) => {
       }
     }
 
-    const purchaseUrl = process.env.VITE_API_PURCHASE || process.env.API_PURCHASE || process.env.PURCHASE_URL || 'https://api.datamartgh.shop/api/developer/purchase'
+    const purchaseUrl = `${resolveHubnetBaseUrl().replace(/\/$/, '')}/place_order`
     if (!purchaseUrl) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase API URL not configured' }) }
 
-    const secretApiKey = process.env.VITE_API_KEY || process.env.API_KEY || ''
+    const secretApiKey = resolveApiKey()
     const headers = { 'Content-Type': 'application/json' }
     if (secretApiKey) headers['X-API-Key'] = secretApiKey
 
@@ -88,8 +126,16 @@ exports.handler = async (event) => {
       bodySample: typeof body === 'object' ? JSON.stringify(body).slice(0, 1000) : String(body)
     })
 
-    // If caller provided a Paystack transaction reference, verify it first and apply idempotency
     const paystackRef = String(body.paystackReference || body.reference || body.transactionReference || body.tx_ref || body.paymentReference || '').trim() || null
+    const requestId = String(body.request_id || body.requestId || paystackRef || `req_${Date.now()}`).trim()
+
+    const hubnetPayload = {
+      network,
+      volume: String(capacity),
+      customer_number: String(phoneNumber),
+      quantity: Number(body.quantity || 1) || 1,
+      request_id: requestId
+    }
 
     // choose idempotency key: prefer paystackRef, otherwise payload hash
     const idempotencyKey = paystackRef || buildPayloadKey(body) || `key_${Date.now()}_${Math.random().toString(36).slice(2)}`
@@ -147,16 +193,14 @@ exports.handler = async (event) => {
         // set in-progress lock
         processedRefs.set(idempotencyKey, { ts: Date.now(), lock: Date.now(), status: 202, response: { message: 'Processing purchase' } })
 
-        // attach idempotency header and transaction reference to upstream
         headers['Idempotency-Key'] = idempotencyKey
-        body.transactionReference = paystackRef
 
-        const resp = await axios.post(purchaseUrl, body, { headers, timeout: 15000 })
+        const resp = await axios.post(purchaseUrl, hubnetPayload, { headers, timeout: 15000 })
+        const normalized = normalizePurchaseResponse(resp.data, requestId)
 
-        // cache successful response
-        processedRefs.set(idempotencyKey, { ts: Date.now(), status: resp.status || 200, response: resp.data })
+        processedRefs.set(idempotencyKey, { ts: Date.now(), status: resp.status || 200, response: normalized })
         console.log('purchase-proxy: upstream response', { status: resp.status })
-        return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(resp.data) }
+        return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(normalized) }
       } catch (err) {
         // remove in-progress marker only if transient error; leave a short lock to prevent immediate dupes
         const prev = processedRefs.get(idempotencyKey) || {}
@@ -168,12 +212,12 @@ exports.handler = async (event) => {
       }
     }
 
-    // No paystack reference provided — just forward
-    const resp = await axios.post(purchaseUrl, body, { headers, timeout: 15000 })
+    const resp = await axios.post(purchaseUrl, hubnetPayload, { headers, timeout: 15000 })
+    const normalized = normalizePurchaseResponse(resp.data, requestId)
 
     console.log('purchase-proxy: upstream response', { status: resp.status })
 
-    return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(resp.data) }
+    return { statusCode: resp.status || 200, headers: CORS_HEADERS, body: JSON.stringify(normalized) }
   } catch (err) {
     console.error('purchase-proxy error', {
       message: err.message,
