@@ -28,6 +28,16 @@ const resolveApiKey = () => (
   ''
 )
 
+// Build the webhook URL Hubnet should POST back to when data delivery changes
+const resolveWebhookUrl = () => {
+  const explicit = process.env.HUBNET_WEBHOOK_URL || ''
+  if (explicit) return explicit
+  // Netlify auto-sets URL (canonical site URL) and DEPLOY_URL (this deploy)
+  const base = process.env.URL || process.env.DEPLOY_URL || process.env.SITE_URL || ''
+  if (base) return `${base.replace(/\/$/, '')}/.netlify/functions/hubnet-webhook`
+  return ''
+}
+
 const normalizeNetwork = (net) => {
   const s = String(net || '').trim().toLowerCase()
   if (!s) return ''
@@ -177,13 +187,14 @@ exports.handler = async (event) => {
     })
 
     const referrer = sanitizePhone(body.referrer || body.accountPhone || '')
+    const webhookUrl = resolveWebhookUrl()
 
     const hubnetPayload = {
       phone: String(phoneNumber),
       volume: String(capacity),
       reference: requestId,
       ...(referrer ? { referrer } : {}),
-      ...(body.webhook ? { webhook: String(body.webhook).trim() } : {})
+      ...(webhookUrl ? { webhook: webhookUrl } : (body.webhook ? { webhook: String(body.webhook).trim() } : {}))
     }
 
     // choose idempotency key: prefer paystackRef, otherwise payload hash

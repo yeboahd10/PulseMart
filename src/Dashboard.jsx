@@ -273,10 +273,12 @@ const Dashboard = () => {
   }, [orders.length])
 
   // Time-based status: Processing for 3 hours, then Delivered
+  // If Hubnet webhook has already set a real status in Firestore, use that instead.
   const getEffectiveStatus = (order) => {
-    // If explicitly failed/refunded in Firestore, honour it
     const stored = normalizeOrderStatus(order.status)
-    if (stored === 'failed' || stored === 'refunded') return stored
+    // Honour any definitive status written by webhook or admin
+    if (stored === 'completed' || stored === 'failed' || stored === 'refunded') return stored
+    // Fall back to time-based logic when no webhook update has arrived yet
     const createdAtMs = order.createdAt instanceof Date ? order.createdAt.getTime() : 0
     if (!createdAtMs) return 'processing'
     return (Date.now() - createdAtMs) >= ORDER_DELIVERED_AFTER_MS ? 'completed' : 'processing'
