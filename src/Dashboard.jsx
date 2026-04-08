@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useSearchParams } from 'react-router-dom'
 import { TiTick } from 'react-icons/ti'
 import { useAuth } from "./context/AuthContext";
-import { FaWallet, FaChevronLeft, FaChevronRight, FaList } from "react-icons/fa";
+import { FaWallet, FaChevronLeft, FaChevronRight, FaList, FaMoneyBillWave } from "react-icons/fa";
 import { CgProfile } from "react-icons/cg";
 import { FaCartPlus } from "react-icons/fa";
 import { FaCediSign, FaLock ,FaRegCopyright} from "react-icons/fa6";
@@ -37,38 +37,7 @@ const statusMeta = (status) => {
   return { label: 'Unknown', badgeClass: 'bg-gray-100 text-gray-800' }
 }
 
-const DATAMART_STATUS_CACHE_KEY = 'datamart_status_cache_v1'
-const ORDER_STATUS_POLL_INTERVAL_MS = 30000
-const ORDER_STATUS_RECENT_WINDOW_MS = 2 * 60 * 60 * 1000
-const MAX_ORDER_STATUS_POLLS = 8
-const TERMINAL_ORDER_STATUSES = new Set(['completed', 'failed', 'refunded'])
-
-const loadDatamartStatusCache = () => {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(DATAMART_STATUS_CACHE_KEY)
-    const parsed = raw ? JSON.parse(raw) : {}
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-const saveDatamartStatusCache = (cache) => {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(DATAMART_STATUS_CACHE_KEY, JSON.stringify(cache || {}))
-  } catch {
-    // ignore localStorage failures
-  }
-}
-
-const parseTimeValue = (value) => {
-  if (!value) return 0
-  const date = (typeof value === 'number') ? new Date(value) : new Date(String(value))
-  const time = date.getTime()
-  return Number.isNaN(time) ? 0 : time
-}
+const ORDER_DELIVERED_AFTER_MS = 3 * 60 * 60 * 1000 // 3 hours
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -83,18 +52,59 @@ const Dashboard = () => {
   const [showPayModal, setShowPayModal] = useState(false)
   const [availableBalance, setAvailableBalance] = useState(null)
   const [orders, setOrders] = useState([])
+  const [transactions, setTransactions] = useState([])
   const [filterQuery, setFilterQuery] = useState('')
   const [copiedId, setCopiedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [showAllOrders, setShowAllOrders] = useState(false)
-  const [orderStatusMap, setOrderStatusMap] = useState({})
-  const orderStatusMapRef = useRef({})
-  const ordersRef = useRef([])
-  const lastOrderStatusSyncAtRef = useRef(0)
-  const datamartStatusCacheRef = useRef(loadDatamartStatusCache())
   
   const [searchParams, setSearchParams] = useSearchParams()
   const [, setSuccessModalOpen] = useState(false)
+
+  // Transactions listener — reads from paystack_callbacks collection
+  useEffect(() => {
+    if (!user?.uid) { setTransactions([]); return }
+    const txCol = collection(db, 'paystack_callbacks')
+    const mapTx = (snap) => snap.docs.map(d => {
+      const data = d.data() || {}
+      let processedAt = null
+      if (data.processedAt) {
+        try {
+          if (typeof data.processedAt.toDate === 'function') processedAt = data.processedAt.toDate()
+          else processedAt = new Date(data.processedAt)
+        } catch { processedAt = null }
+      }
+      const isPurchase = !!(data.metadata?.purchase)
+      return {
+        id: d.id,
+        reference: data.reference || d.id,
+        amount: Number(data.amount ?? 0),
+        rawAmount: Number(data.rawAmount ?? data.amount ?? 0),
+        type: isPurchase ? 'Bundle Purchase' : 'Wallet Top-up',
+        processedAt,
+        network: data.metadata?.purchase?.network || null,
+        capacityLabel: data.metadata?.purchase?.capacityLabel || data.metadata?.purchase?.capacity || null,
+      }
+    }).sort((a, b) => (b.processedAt?.getTime() ?? 0) - (a.processedAt?.getTime() ?? 0))
+
+    let unsub
+    try {
+      const q = query(txCol, where('userId', '==', user.uid), orderBy('processedAt', 'desc'))
+      unsub = onSnapshot(q, (snap) => setTransactions(mapTx(snap)), (err) => {
+        // index not yet built — fall back to unordered
+        const msg = String(err?.message || '').toLowerCase()
+        if (msg.includes('index') || msg.includes('requires an index')) {
+          const fallbackQ = query(txCol, where('userId', '==', user.uid))
+          unsub = onSnapshot(fallbackQ, (snap) => setTransactions(mapTx(snap)), (err2) => console.error('tx fallback error', err2))
+        } else {
+          console.error('transactions snapshot error', err)
+        }
+      })
+    } catch (e) {
+      console.error('Failed to subscribe to transactions', e)
+    }
+    return () => { if (typeof unsub === 'function') unsub() }
+  }, [user?.uid])
 
   useEffect(() => {
     if (!user || !user.uid) return
@@ -153,6 +163,7 @@ const Dashboard = () => {
       label: "Orders",
       badge: orders.length || undefined,
     },
+    { id: "transactions", icon: <FaMoneyBillWave size="1.5em" />, label: "Transactions" },
     { id: "profile", icon: <CgProfile size="1.5em" />, label: "Profile" },
   ];
 
@@ -161,14 +172,6 @@ const Dashboard = () => {
     { id: 'telecel', network: 'Telecel', dataAmount: '500MB', price: '3.00' },
     { id: 'at', network: 'AirtelTigo', dataAmount: '2GB', price: '8.00' }
   ]
-
-  useEffect(() => {
-    orderStatusMapRef.current = orderStatusMap
-  }, [orderStatusMap])
-
-  useEffect(() => {
-    ordersRef.current = orders
-  }, [orders])
 
   useEffect(() => {
     if (!user?.uid) { setOrders([]); return }
@@ -181,8 +184,6 @@ const Dashboard = () => {
         const responseData = rawResponse?.data || {}
         const upstreamData = responseData?.raw || rawResponse?.result || {}
         const orderReference = data.orderReference || data.order_reference || data.reference || data.purchaseId || responseData?.orderReference || responseData?.order_reference || rawResponse?.orderReference || rawResponse?.order_id || upstreamData?.order_id || upstreamData?.id || ''
-        const cacheKey = orderReference || d.id
-        const cached = datamartStatusCacheRef.current[cacheKey] || null
         const rawPrice = data.displayPrice ?? data.display_price ?? data.uiPrice ?? data.localPrice ?? data.price ?? data.amount ?? 0
         const displayPrice = Number(rawPrice || 0)
         const legacySuccess = !orderReference && (
@@ -197,13 +198,9 @@ const Dashboard = () => {
           responseData?.orderStatus || responseData?.order_status || responseData?.status ||
           rawResponse?.orderStatus || rawResponse?.order_status || rawResponse?.status_label ||
           upstreamData?.order_status || upstreamData?.status || upstreamData?.status_label ||
-          cached?.status || (legacySuccess ? 'completed' : '')
+          (legacySuccess ? 'completed' : '')
         const status = normalizeOrderStatus(rawStatus || '')
-        const statusUpdatedAt = data.orderStatusUpdatedAt || data.statusUpdatedAt || cached?.updatedAt || null
-
-        if (cacheKey && status && status !== 'pending') {
-          datamartStatusCacheRef.current[cacheKey] = { status, updatedAt: statusUpdatedAt }
-        }
+        const statusUpdatedAt = data.orderStatusUpdatedAt || data.statusUpdatedAt || null
 
         let createdAtDate = null
         if (data.createdAt) {
@@ -275,110 +272,15 @@ const Dashboard = () => {
     setShowAllOrders(false)
   }, [orders.length])
 
-  useEffect(() => {
-    if (!orders.length) {
-      setOrderStatusMap({})
-      return
-    }
-
-    let active = true
-    let intervalId
-
-    const shouldPollOrder = (order) => {
-      if (!order?.orderReference) return false
-
-      const effectiveStatus = normalizeOrderStatus(orderStatusMapRef.current[order.id]?.status || order.status)
-      if (!TERMINAL_ORDER_STATUSES.has(effectiveStatus)) return true
-
-      const recentCutoff = Date.now() - ORDER_STATUS_RECENT_WINDOW_MS
-      const createdAtMs = order.createdAt instanceof Date ? order.createdAt.getTime() : 0
-      const updatedAtMs = parseTimeValue(orderStatusMapRef.current[order.id]?.updatedAt || order.statusUpdatedAt)
-      return Math.max(createdAtMs, updatedAtMs) >= recentCutoff
-    }
-
-    const syncOrderStatuses = async (force = false) => {
-      const now = Date.now()
-      if (!force && (now - lastOrderStatusSyncAtRef.current) < ORDER_STATUS_POLL_INTERVAL_MS) {
-        return
-      }
-
-      const currentOrders = ordersRef.current
-      const candidates = currentOrders
-        .filter(shouldPollOrder)
-        .slice(0, MAX_ORDER_STATUS_POLLS)
-
-      if (!candidates.length) return
-
-      lastOrderStatusSyncAtRef.current = now
-
-      try {
-        const responses = await Promise.all(candidates.map(async (o) => {
-          try {
-            const r = await fetch(`/.netlify/functions/order-status?reference=${encodeURIComponent(o.orderReference)}`)
-            if (!r.ok) return null
-            const payload = await r.json()
-            const upstream = payload?.data?.orderStatus || payload?.data?.status || payload?.normalized?.orderStatus || ''
-            return { id: o.id, status: normalizeOrderStatus(upstream || o.status), updatedAt: payload?.data?.updatedAt || payload?.normalized?.updatedAt || null }
-          } catch {
-            return null
-          }
-        }))
-
-        if (!active) return
-        const next = {}
-        const writes = []
-
-        responses.filter(Boolean).forEach((row) => {
-          const sourceOrder = candidates.find((c) => c.id === row.id)
-          if (!sourceOrder) return
-
-          const prevEntry = orderStatusMapRef.current[row.id] || null
-          const previousStatus = normalizeOrderStatus(prevEntry?.status || sourceOrder.status)
-          const previousUpdatedAt = String(prevEntry?.updatedAt || sourceOrder.statusUpdatedAt || '')
-          const nextUpdatedAt = String(row.updatedAt || '')
-          const changed = row.status !== previousStatus || nextUpdatedAt !== previousUpdatedAt
-
-          if (!changed) return
-
-          next[row.id] = row
-
-          const cacheKey = sourceOrder.orderReference || sourceOrder.id
-          datamartStatusCacheRef.current[cacheKey] = { status: row.status, updatedAt: row.updatedAt || null }
-
-          writes.push(
-            setDoc(doc(db, 'purchases', sourceOrder.id), {
-              orderStatus: row.status,
-              orderStatusUpdatedAt: row.updatedAt || null,
-              lastStatusSyncAt: new Date().toISOString(),
-              statusSource: 'datamart_poll'
-            }, { merge: true }).catch((err) => {
-              console.warn('Failed to persist Datamart status', sourceOrder.id, err)
-            })
-          )
-        })
-
-        if (Object.keys(next).length > 0) {
-          setOrderStatusMap((prev) => ({ ...prev, ...next }))
-          saveDatamartStatusCache(datamartStatusCacheRef.current)
-          if (writes.length) await Promise.all(writes)
-        }
-      } catch (e) {
-        console.error('Order status sync failed', e)
-      }
-    }
-
-    syncOrderStatuses(true)
-    intervalId = setInterval(() => {
-      void syncOrderStatuses()
-    }, ORDER_STATUS_POLL_INTERVAL_MS)
-
-    return () => {
-      active = false
-      if (intervalId) clearInterval(intervalId)
-    }
-  }, [orders.length])
-
-  const getEffectiveStatus = (order) => normalizeOrderStatus(orderStatusMap[order.id]?.status || order.status)
+  // Time-based status: Processing for 3 hours, then Delivered
+  const getEffectiveStatus = (order) => {
+    // If explicitly failed/refunded in Firestore, honour it
+    const stored = normalizeOrderStatus(order.status)
+    if (stored === 'failed' || stored === 'refunded') return stored
+    const createdAtMs = order.createdAt instanceof Date ? order.createdAt.getTime() : 0
+    if (!createdAtMs) return 'processing'
+    return (Date.now() - createdAtMs) >= ORDER_DELIVERED_AFTER_MS ? 'completed' : 'processing'
+  }
 
   const hasChanges = () => {
     if (!user) return false
@@ -750,6 +652,44 @@ const Dashboard = () => {
                 )
               })()}
             </div>
+          </div>
+        )}
+        {selected === "transactions" && (
+          <div className="m-3 p-4 bg-base-100 rounded-box shadow-md">
+            <h3 className="font-semibold mb-4 text-2xl">Transactions</h3>
+            {transactions.length === 0 ? (
+              <div className="text-center py-10 text-slate-400">No transactions yet</div>
+            ) : (
+              <div className="space-y-3">
+                {transactions.map((tx) => (
+                  <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-white hover:shadow-sm transition">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 flex items-center justify-center rounded-full text-white text-sm font-bold ${
+                        tx.type === 'Wallet Top-up' ? 'bg-emerald-500' : 'bg-blue-500'
+                      }`}>
+                        {tx.type === 'Wallet Top-up' ? '+' : 'B'}
+                      </div>
+                      <div>
+                        <div className="font-medium text-slate-800 text-sm">{tx.type}</div>
+                        {tx.type === 'Bundle Purchase' && tx.network && (
+                          <div className="text-xs text-slate-500">{tx.network}{tx.capacityLabel ? ` • ${tx.capacityLabel}` : ''}</div>
+                        )}
+                        <div className="text-xs text-slate-400 font-mono">{tx.reference}</div>
+                        <div className="text-xs text-slate-400">{tx.processedAt ? tx.processedAt.toLocaleString() : '-'}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`font-bold text-base ${
+                        tx.type === 'Wallet Top-up' ? 'text-emerald-600' : 'text-blue-600'
+                      }`}>
+                        {tx.type === 'Wallet Top-up' ? '+' : ''}GHS {tx.amount.toFixed(2)}
+                      </div>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">Completed</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {selected === "profile" && (

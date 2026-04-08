@@ -106,6 +106,7 @@ const PaystackCallback = () => {
             const safeRefId = String(tx.reference || reference || '').replace(/[.#$/\[\]]+/g, '_') || String(reference).replace(/[.#$/\[\]]+/g, '_')
             const markerRef = doc(db, 'paystack_callbacks', safeRefId)
 
+            let calculatedNewBalance = creditAmount
             await runTransaction(db, async (t) => {
               const markerSnap = await t.get(markerRef)
               if (markerSnap.exists()) {
@@ -115,39 +116,53 @@ const PaystackCallback = () => {
 
               const snap2 = await t.get(userRef)
               const current = Number(snap2.exists() ? (snap2.data().balance ?? snap2.data().wallet ?? 0) : 0)
-              const newBalance = Number((current + creditAmount).toFixed(2))
-              t.update(userRef, { balance: newBalance })
+              calculatedNewBalance = Number((current + creditAmount).toFixed(2))
+              t.update(userRef, { balance: calculatedNewBalance })
               t.set(markerRef, { reference: tx.reference || reference, userId: userRef.id, amount: creditAmount, rawAmount: amountGhs, metadata: tx.metadata || null, processedAt: serverTimestamp() })
             })
 
-            // get updated balance for SMS
+            const meta = tx.metadata || {}
+            const purchaseMeta = meta.purchase || null
+
+            // get updated balance for SMS - use calculated value first, then verify from Firestore
             let sentDepositSms = false
-            let newBalanceForSms = creditAmount
+            let newBalanceForSms = calculatedNewBalance
             try {
+              // wait a moment for Firestore replication, then fetch the current balance
+              await new Promise(resolve => setTimeout(resolve, 100))
               const updatedSnap = await getDoc(userRef)
               const userDoc = updatedSnap.exists() ? updatedSnap.data() : {}
-              newBalanceForSms = Number(userDoc.balance ?? userDoc.wallet ?? creditAmount)
+              const firestoreBalance = Number(userDoc.balance ?? userDoc.wallet ?? null)
+              // use Firestore value if it exists and is reasonable, otherwise use calculated value
+              if (!isNaN(firestoreBalance) && firestoreBalance > 0) {
+                newBalanceForSms = firestoreBalance
+              } else {
+                newBalanceForSms = calculatedNewBalance
+              }
               
               // refresh auth context after credit
-              const combined = fbUser && fbUser.uid ? { uid: fbUser.uid, email: fbUser.email, displayName: fbUser.displayName, ...userDoc } : userDoc
+              const combined = fbUser && fbUser.uid ? { uid: fbUser.uid, email: fbUser.email, displayName: fbUser.displayName, ...userDoc, balance: newBalanceForSms } : { ...userDoc, balance: newBalanceForSms }
               try {
                 if (typeof login === 'function') await login(combined)
               } catch (e) {
                 console.warn('Failed to update auth context after payment', e)
               }
 
-              // send deposit SMS notification
+              // Only send deposit SMS for actual wallet top-ups.
+              // Paystack-assisted bundle purchases should only receive the order-success SMS.
               try {
                 const userName = combined?.fullName || combined?.displayName || combined?.name || 'User'
                 const userPhone = combined?.phoneNumber || combined?.phone || combined?.accountPhone || tx?.customer?.phone || null
                 
-                if (userPhone) {
+                if (userPhone && !purchaseMeta) {
                   const depositPayload = {
                     to: userPhone,
                     userName,
                     amount: creditAmount,
                     newBalance: newBalanceForSms
                   }
+                  
+                  console.log('Sending deposit SMS with payload:', depositPayload, '(calculated:', calculatedNewBalance, ', firestore:', firestoreBalance, ')')
                   
                   const smsStaff = await fetch('/.netlify/functions/deposit-notify', {
                     method: 'POST',
@@ -162,6 +177,8 @@ const PaystackCallback = () => {
                   } else {
                     console.warn('Failed to send deposit SMS', await smsStaff.text())
                   }
+                } else if (purchaseMeta) {
+                  console.log('Skipping deposit SMS because this Paystack payment is tied to a bundle purchase')
                 }
               } catch (smsErr) {
                 console.warn('Deposit SMS notification error (non-blocking)', smsErr)
@@ -172,8 +189,6 @@ const PaystackCallback = () => {
 
             // attempt automatic purchase if Paystack transaction included purchase metadata
             try {
-              const meta = tx.metadata || {}
-              const purchaseMeta = meta.purchase || null
               if (purchaseMeta) {
                 const purchaseEndpoint = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
                   ? '/.netlify/functions/purchase-proxy'
