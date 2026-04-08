@@ -76,7 +76,13 @@ const sendArkeselSms = async ({ to, message }) => {
   }
 }
 
+const sendDepositSms = async ({ to, userName, amount, newBalance }) => {
+  const message = `Hi ${userName}, your wallet has been credited with GH₵${Number(amount).toFixed(2)}. Current Balance: GH₵${Number(newBalance).toFixed(2)}`
+  return sendArkeselSms({ to, message })
+}
+
 module.exports = {
   sendArkeselSms,
+  sendDepositSms,
   normalizePhone
 }

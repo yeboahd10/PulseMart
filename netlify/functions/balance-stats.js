@@ -7,21 +7,53 @@ const CORS_HEADERS = {
   'Content-Type': 'application/json'
 }
 
+const resolveHubnetBaseUrl = () => (
+  process.env.HUBNET_BASE_URL ||
+  process.env.VITE_HUBNET_BASE_URL ||
+  'https://console.hubnet.app/live/api/context/business/transaction'
+)
+
+const resolveApiKey = () => (
+  process.env.HUBNET_API_KEY ||
+  process.env.VITE_API_KEY_HUB ||
+  process.env.VITE_API_KEY ||
+  process.env.API_KEY ||
+  ''
+)
+
+const extractBalance = (payload) => {
+  const candidates = [
+    payload?.wallet_balance,
+    payload?.balance,
+    payload?.data?.wallet_balance,
+    payload?.data?.balance,
+    payload?.wallet?.balance,
+    payload?.data?.wallet?.balance
+  ]
+
+  for (const candidate of candidates) {
+    const numeric = Number(candidate)
+    if (Number.isFinite(numeric)) return numeric
+  }
+
+  return 0
+}
+
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS_HEADERS, body: '' }
     if (event.httpMethod !== 'GET') return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Method not allowed' }) }
 
-    const upstream = `${String(process.env.HUBNET_BASE_URL || process.env.VITE_HUBNET_BASE_URL || 'https://hubnetgh.site/wp-json/hubnet-api/v1').replace(/\/$/, '')}/check_balance`
-    const secretApiKey = process.env.HUBNET_API_KEY || process.env.VITE_API_KEY || process.env.API_KEY || ''
+    const upstream = `${resolveHubnetBaseUrl().replace(/\/$/, '')}/check_balance`
+    const secretApiKey = resolveApiKey()
 
     const resp = await axios.get(upstream, {
-      headers: secretApiKey ? { 'X-API-Key': secretApiKey } : undefined,
+      headers: secretApiKey ? { token: `Bearer ${secretApiKey}`, Accept: 'application/json' } : undefined,
       timeout: 10000
     })
 
     const payload = resp.data || {}
-    const walletBalance = Number(payload.wallet_balance ?? payload.balance ?? 0) || 0
+    const walletBalance = extractBalance(payload)
 
     return {
       statusCode: 200,

@@ -97,19 +97,23 @@ const Dashboard = () => {
   const [, setSuccessModalOpen] = useState(false)
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !user.uid) return
     setProfileFullName(user.fullName ?? user.displayName ?? '')
     setProfileEmail(user.email ?? '')
     setProfilePhone(user.phone ?? '')
     setProfileUID(user.uid ?? '')
     setProfileReferral(user.referralCode ?? '')
-    // listen for balance changes in Firestore
+    // listen for balance changes in Firestore (immediately and on updates)
     let unsub
+    let unsubProfile
     try {
       const userRef = doc(db, 'users', user.uid)
+      
+      // Primary listener for balance in real-time
       unsub = onSnapshot(userRef, (snap) => {
         const data = snap.exists() ? snap.data() : {}
         const bal = Number(data.balance ?? data.wallet ?? 0)
+        console.log('Balance snapshot received', { userId: user.uid, balance: bal })
         setAvailableBalance(bal)
       }, (err) => {
         console.error('Balance snapshot error', err)
@@ -118,8 +122,11 @@ const Dashboard = () => {
       console.error('Balance listener setup failed', e)
     }
 
-    return () => { if (typeof unsub === 'function') unsub() }
-  }, [user])
+    return () => { 
+      if (typeof unsub === 'function') unsub()
+      if (typeof unsubProfile === 'function') unsubProfile()
+    }
+  }, [user?.uid])
 
 
 

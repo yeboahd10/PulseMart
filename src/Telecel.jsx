@@ -12,12 +12,12 @@ import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef } fr
 import { db } from './firebase'
 import { useAuth } from './context/AuthContext'
 import { FaCediSign, FaPhone, FaRegCopyright } from "react-icons/fa6";
-import { mapNetwork } from './utils/network'
+import { mapNetwork, toHubnetVolume } from './utils/network'
 import { TiTick } from 'react-icons/ti'
 import { Link } from "react-router-dom";
 
 // module-scope env and prices for Telecel
-const apiKey = import.meta.env.VITE_API_KEY
+const apiKey = import.meta.env.VITE_API_KEY_HUB || import.meta.env.VITE_API_KEY
 const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy'
 const localPricesTelecel = [25, 40, 48, 55, 68,85,100,120,137,157,174,195,360]
 
@@ -27,7 +27,7 @@ const Telecel = () => {
   const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [phone, setPhone] = useState("")
-  const { bundles, setBundles, loading, error } = usePackages('Telecel', localPricesTelecel)
+  const { bundles, loading } = usePackages('Telecel', localPricesTelecel)
   const [successModalOpen, setSuccessModalOpen] = useState(false)
   const [successInfo, setSuccessInfo] = useState(null)
   const [placing, setPlacing] = useState(false)
@@ -62,7 +62,12 @@ const Telecel = () => {
         return
       }
 
-      const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
+      const capacity = String(b.volume || toHubnetVolume(b.dataAmount || b.capacity || ''))
+      if (!capacity) {
+        alert('Bundle volume not configured')
+        setPlacing(false)
+        return
+      }
       const initPayload = {
         amount: total,
         email: user.email,
@@ -96,7 +101,12 @@ const Telecel = () => {
     }
     const actualPrice = Number(b.apiPrice ?? b.price ?? 0)
 
-    const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
+    const capacity = String(b.volume || toHubnetVolume(b.dataAmount || b.capacity || ''))
+    if (!capacity) {
+      alert('Bundle volume not configured')
+      setPlacing(false)
+      return
+    }
     const payload = {
       phoneNumber: phone,
       network: mapNetwork(b.network || 'Telecel'),

@@ -11,15 +11,16 @@ const CORS_HEADERS = {
 
 const resolveApiKey = () => (
   process.env.HUBNET_API_KEY ||
+  process.env.VITE_API_KEY_HUB ||
   process.env.API_KEY ||
   process.env.VITE_API_KEY ||
   ''
 )
 
-const resolveBaseUrl = () => (
-  process.env.HUBNET_BASE_URL ||
-  process.env.VITE_HUBNET_BASE_URL ||
-  'https://hubnetgh.site/wp-json/hubnet-api/v1'
+const resolveOrderStatusUrl = () => (
+  process.env.HUBNET_ORDER_STATUS_URL ||
+  process.env.VITE_HUBNET_ORDER_STATUS_URL ||
+  ''
 )
 
 const normalizeStatus = (value) => {
@@ -78,11 +79,34 @@ exports.handler = async (event) => {
       return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Hubnet API key not configured' }) }
     }
 
-    const baseUrl = resolveBaseUrl().replace(/\/$/, '')
-    const upstream = await axios.get(`${baseUrl}/order_status`, {
-      params: { order_id: reference },
+    const orderStatusUrl = resolveOrderStatusUrl()
+    if (!orderStatusUrl) {
+      return {
+        statusCode: 200,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          success: true,
+          message: 'Hubnet order status endpoint not configured; returning processing fallback',
+          data: {
+            orderStatus: 'processing',
+            status: 'processing',
+            updatedAt: null,
+            reference,
+            orderReference: reference
+          },
+          normalized: {
+            reference,
+            orderStatus: 'processing',
+            updatedAt: null
+          }
+        })
+      }
+    }
+
+    const upstream = await axios.get(orderStatusUrl, {
+      params: { reference },
       headers: {
-        'X-API-Key': apiKey,
+        token: `Bearer ${apiKey}`,
         Accept: 'application/json'
       },
       timeout: 15000

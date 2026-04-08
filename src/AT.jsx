@@ -11,9 +11,9 @@ import OutOfStockModal from './components/OutOfStockModal'
 import axios from 'axios'
 import { TiTick } from 'react-icons/ti'
 import { FaCediSign, FaRegCopyright } from 'react-icons/fa6'
-import { mapNetwork } from './utils/network'
+import { mapNetwork, toHubnetVolume } from './utils/network'
 
-const apiKey = import.meta.env.VITE_API_KEY
+const apiKey = import.meta.env.VITE_API_KEY_HUB || import.meta.env.VITE_API_KEY
 const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy'
 
 const localPricesAT = [4.35, 8.95, 13.85, 17.7, 21.0, 24.7, 33.7, 41.7, 47.7, 57.7, 95.2, 115.2, 151.2, 190.2]
@@ -24,7 +24,7 @@ const AT = () => {
   const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [phone, setPhone] = useState('')
-  const { bundles, setBundles, loading, error } = usePackages('AT', localPricesAT)
+  const { bundles, loading } = usePackages('AT', localPricesAT)
   const [successModalOpen, setSuccessModalOpen] = useState(false)
   const [successInfo, setSuccessInfo] = useState(null)
   const [placing, setPlacing] = useState(false)
@@ -78,7 +78,12 @@ const AT = () => {
         return
       }
 
-      const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
+      const capacity = String(b.volume || toHubnetVolume(b.dataAmount || b.capacity || ''))
+      if (!capacity) {
+        alert('Bundle volume not configured')
+        setPlacing(false)
+        return
+      }
       const initPayload = {
         amount: total,
         email: user.email,
@@ -112,7 +117,12 @@ const AT = () => {
 
     const actualPrice = Number(b.apiPrice ?? b.price ?? 0)
 
-    const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
+    const capacity = String(b.volume || toHubnetVolume(b.dataAmount || b.capacity || ''))
+    if (!capacity) {
+      alert('Bundle volume not configured')
+      setPlacing(false)
+      return
+    }
 
     const payload = {
       phoneNumber: phone,

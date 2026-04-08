@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { toHubnetVolume } from '../utils/network'
 
 export default function usePackages(provider, localPrices) {
   const [bundles, setBundles] = useState(
-    (localPrices || []).map((p, i) => ({ network: provider, dataAmount: `${i + 1} GB`, price: p, apiPrice: null }))
+    (localPrices || []).map((p, i) => ({
+      network: provider,
+      dataAmount: `${i + 1} GB`,
+      volume: toHubnetVolume(`${i + 1} GB`),
+      price: p,
+      apiPrice: null
+    }))
   )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -25,6 +32,7 @@ export default function usePackages(provider, localPrices) {
           return {
             network: provider,
             dataAmount: capacity,
+            volume: item.volume || item.capacity || item.size || toHubnetVolume(capacity),
             price: localPrices?.[i] ?? item.price ?? null,
             apiPrice: item.price ?? null,
           }
@@ -33,7 +41,13 @@ export default function usePackages(provider, localPrices) {
         // pad with local fallback if API returns fewer items
         if (mapped.length < (localPrices || []).length) {
           for (let j = mapped.length; j < (localPrices || []).length; j++) {
-            mapped.push({ network: provider, dataAmount: `${j + 1} GB`, price: localPrices[j], apiPrice: null })
+            mapped.push({
+              network: provider,
+              dataAmount: `${j + 1} GB`,
+              volume: toHubnetVolume(`${j + 1} GB`),
+              price: localPrices[j],
+              apiPrice: null
+            })
           }
         }
 
@@ -41,7 +55,13 @@ export default function usePackages(provider, localPrices) {
       } catch (err) {
         if (!cancelled) {
           setError(err)
-          setBundles((localPrices || []).map((p, i) => ({ network: provider, dataAmount: `${i + 1} GB`, price: p, apiPrice: null })))
+          setBundles((localPrices || []).map((p, i) => ({
+            network: provider,
+            dataAmount: `${i + 1} GB`,
+            volume: toHubnetVolume(`${i + 1} GB`),
+            price: p,
+            apiPrice: null
+          })))
         }
       } finally {
         if (!cancelled) setLoading(false)

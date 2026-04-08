@@ -12,10 +12,10 @@ import { db } from './firebase'
 import { useAuth } from './context/AuthContext'
 import { TiTick } from "react-icons/ti";
 import { FaCediSign, FaPhone, FaRegCopyright } from "react-icons/fa6";
-import { mapNetwork } from './utils/network'
+import { mapNetwork, toHubnetVolume } from './utils/network'
 import { Link } from "react-router-dom";
 
-const apiKey = import.meta.env.VITE_API_KEY;
+const apiKey = import.meta.env.VITE_API_KEY_HUB || import.meta.env.VITE_API_KEY;
 const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy';
 
 const localPrices = [4.7, 9.4, 13.9, 18.7, 23.9, 27.9,35.7,44.5,62.5,83,105,129,166,207,407];
@@ -25,7 +25,7 @@ const MTN = () => {
   const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [phone, setPhone] = useState("");
-  const { bundles, setBundles, loading, error } = usePackages('MTN', localPrices)
+  const { bundles, loading } = usePackages('MTN', localPrices)
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [successInfo, setSuccessInfo] = useState(null);
   const [placing, setPlacing] = useState(false);
@@ -76,7 +76,12 @@ const MTN = () => {
         return
       }
 
-      const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
+      const capacity = String(b.volume || toHubnetVolume(b.dataAmount || b.capacity || ''))
+      if (!capacity) {
+        alert('Bundle volume not configured')
+        setPlacing(false)
+        return
+      }
 
       // initialize Paystack payment for the shortfall and include purchase metadata
       const initPayload = {
@@ -114,7 +119,12 @@ const MTN = () => {
     // require API price for purchase (only after wallet/Paystack handling)
     const actualPrice = Number(b.apiPrice ?? b.price ?? 0)
 
-    const capacity = String((b.dataAmount || '').replace(/[^0-9]/g, '')) || String(b.capacity || '')
+    const capacity = String(b.volume || toHubnetVolume(b.dataAmount || b.capacity || ''))
+    if (!capacity) {
+      alert('Bundle volume not configured')
+      setPlacing(false)
+      return
+    }
 
     const payload = {
       phoneNumber: phone,

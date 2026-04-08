@@ -17,11 +17,12 @@ const CORS_HEADERS = {
 const resolveHubnetBaseUrl = () => (
   process.env.HUBNET_BASE_URL ||
   process.env.VITE_HUBNET_BASE_URL ||
-  'https://hubnetgh.site/wp-json/hubnet-api/v1'
+  'https://console.hubnet.app/live/api/context/business/transaction'
 )
 
 const resolveApiKey = () => (
   process.env.HUBNET_API_KEY ||
+  process.env.VITE_API_KEY_HUB ||
   process.env.VITE_API_KEY ||
   process.env.API_KEY ||
   ''
@@ -31,19 +32,38 @@ const normalizeNetwork = (net) => {
   const s = String(net || '').trim().toLowerCase()
   if (!s) return ''
   if (s === 'mtn' || s === 'yello' || s.includes('mtn') || s.includes('yello')) return 'mtn'
-  if (s.includes('telecel') || s.includes('vodafone')) return 'telecel'
-  if (s === 'at' || s.includes('airtel') || s.includes('tigo') || s.includes('at_premium')) return 'airteltigo'
+  if (s.includes('telecel') || s.includes('vodafone') || s.includes('big-time')) return 'big-time'
+  if (s === 'at' || s.includes('airtel') || s.includes('tigo') || s.includes('at_premium')) return 'at'
   return s
 }
+
+const buildHubnetReference = (seed) => {
+  const cleaned = String(seed || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 25)
+  if (cleaned.length >= 6) return cleaned
+  return `HB${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`.replace(/[^A-Za-z0-9-]/g, '').slice(0, 25)
+}
+
+const sanitizePhone = (value) => String(value || '').replace(/\D/g, '').slice(-10)
 
 const normalizePurchaseResponse = (upstreamData, fallbackRequestId) => {
   const raw = upstreamData || {}
   const nested = raw?.data || raw?.result || {}
-  const success = raw?.success === true || nested?.success === true || String(raw?.status || '').toLowerCase() === 'success' || String(nested?.status || '').toLowerCase() === 'success'
-  const orderId = raw?.order_id || raw?.orderId || raw?.id || nested?.order_id || nested?.orderId || nested?.id || null
-  const orderReference = String(orderId || fallbackRequestId || '').trim() || null
+  const success =
+    raw?.status === true ||
+    nested?.status === true ||
+    String(raw?.status || '').toLowerCase() === 'success' ||
+    String(nested?.status || '').toLowerCase() === 'success' ||
+    raw?.success === true ||
+    nested?.success === true ||
+    String(raw?.message || '').trim() === '0000' ||
+    String(nested?.message || '').trim() === '0000' ||
+    String(raw?.reason || '').toLowerCase() === 'successful' ||
+    String(raw?.code || '').toLowerCase().includes('successfully')
+  const orderId = raw?.transaction_id || raw?.payment_id || raw?.order_id || raw?.orderId || raw?.id || nested?.transaction_id || nested?.payment_id || nested?.order_id || nested?.orderId || nested?.id || null
+  const orderReference = String(raw?.reference || nested?.reference || fallbackRequestId || '').trim() || null
+  const transactionReference = String(raw?.transaction_id || nested?.transaction_id || raw?.payment_id || nested?.payment_id || orderReference || '').trim() || null
   const total = Number(raw?.total || raw?.amount || nested?.total || nested?.amount || 0) || null
-  const message = String(raw?.message || nested?.message || (success ? 'Order placed successfully' : 'Order placement failed'))
+  const message = String(raw?.code || nested?.code || raw?.reason || nested?.reason || raw?.message || nested?.message || (success ? 'Order placed successfully' : 'Order placement failed'))
 
   return {
     success,
@@ -51,14 +71,14 @@ const normalizePurchaseResponse = (upstreamData, fallbackRequestId) => {
     message,
     order_id: orderId,
     orderReference,
-    transactionReference: orderReference,
+    transactionReference,
     total,
     data: {
       status: success ? 'success' : 'failed',
-      orderStatus: success ? 'pending' : 'failed',
+      orderStatus: success ? 'processing' : 'failed',
       orderId,
       orderReference,
-      transactionReference: orderReference,
+      transactionReference,
       total,
       raw
     }
@@ -71,9 +91,11 @@ const resolveAccountName = (body) => String(
 
 const resolveCapacityLabel = (body, normalizedCapacity) => {
   const raw = String(body?.capacityLabel || '').trim()
-  if (raw) return raw
-  const digits = String(normalizedCapacity || '').replace(/\D/g, '')
+  // only use capacityLabel if it contains a letter (e.g. "1 GB", "500MB"), not a bare number
+  if (raw && /[a-zA-Z]/.test(raw)) return raw
+  const digits = Number(String(normalizedCapacity || '').replace(/\D/g, ''))
   if (!digits) return 'your selected bundle'
+  if (digits >= 1000) return `${(digits / 1000).toFixed(digits % 1000 === 0 ? 0 : 1)} GB`
   return `${digits}MB`
 }
 
@@ -103,14 +125,14 @@ exports.handler = async (event) => {
 
     const body = event.body ? JSON.parse(event.body) : {}
 
-    const phoneNumber = body.phoneNumber || body.phone || body.msisdn || ''
+    const phoneNumber = sanitizePhone(body.phoneNumber || body.phone || body.msisdn || '')
     let network = body.network || body.net || ''
     let capacity = body.capacity || body.size || body.data || ''
 
     capacity = String(capacity || '').replace(/[^0-9]/g, '')
     network = normalizeNetwork(network)
 
-    if (!phoneNumber || !network || !capacity) {
+    if (!phoneNumber || phoneNumber.length !== 10 || !network || !capacity) {
       return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Missing required fields: phoneNumber, network, capacity' }) }
     }
 
@@ -131,12 +153,19 @@ exports.handler = async (event) => {
       }
     }
 
-    const purchaseUrl = `${resolveHubnetBaseUrl().replace(/\/$/, '')}/place_order`
+    const secretApiKey = resolveApiKey()
+    if (!secretApiKey) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Hubnet API key not configured' }) }
+
+    const paystackRef = String(body.paystackReference || body.reference || body.transactionReference || body.tx_ref || body.paymentReference || '').trim() || null
+    const requestId = buildHubnetReference(body.request_id || body.requestId || paystackRef)
+    const purchaseUrl = `${resolveHubnetBaseUrl().replace(/\/$/, '')}/${network}-new-transaction`
     if (!purchaseUrl) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase API URL not configured' }) }
 
-    const secretApiKey = resolveApiKey()
-    const headers = { 'Content-Type': 'application/json' }
-    if (secretApiKey) headers['X-API-Key'] = secretApiKey
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      token: `Bearer ${secretApiKey}`
+    }
 
     // Diagnostic logging (avoid printing secrets)
     console.log('purchase-proxy: forwarding request', {
@@ -147,15 +176,14 @@ exports.handler = async (event) => {
       bodySample: typeof body === 'object' ? JSON.stringify(body).slice(0, 1000) : String(body)
     })
 
-    const paystackRef = String(body.paystackReference || body.reference || body.transactionReference || body.tx_ref || body.paymentReference || '').trim() || null
-    const requestId = String(body.request_id || body.requestId || paystackRef || `req_${Date.now()}`).trim()
+    const referrer = sanitizePhone(body.referrer || body.accountPhone || '')
 
     const hubnetPayload = {
-      network,
+      phone: String(phoneNumber),
       volume: String(capacity),
-      customer_number: String(phoneNumber),
-      quantity: Number(body.quantity || 1) || 1,
-      request_id: requestId
+      reference: requestId,
+      ...(referrer ? { referrer } : {}),
+      ...(body.webhook ? { webhook: String(body.webhook).trim() } : {})
     }
 
     // choose idempotency key: prefer paystackRef, otherwise payload hash
@@ -214,8 +242,6 @@ exports.handler = async (event) => {
         // set in-progress lock
         processedRefs.set(idempotencyKey, { ts: Date.now(), lock: Date.now(), status: 202, response: { message: 'Processing purchase' } })
 
-        headers['Idempotency-Key'] = idempotencyKey
-
         const resp = await axios.post(purchaseUrl, hubnetPayload, { headers, timeout: 15000 })
         const normalized = normalizePurchaseResponse(resp.data, requestId)
         if (normalized.success) {
@@ -226,7 +252,11 @@ exports.handler = async (event) => {
             reason: smsResult.reason || null
           }
           if (!smsResult.ok && !smsResult.skipped) {
-            console.warn('purchase-proxy: order-placed SMS failed', smsResult)
+            console.warn('purchase-proxy: order-placed SMS failed', {
+              recipient: smsResult.recipient || 'unknown',
+              status: smsResult.status,
+              error: smsResult.error
+            })
           }
         }
 
@@ -254,7 +284,11 @@ exports.handler = async (event) => {
         reason: smsResult.reason || null
       }
       if (!smsResult.ok && !smsResult.skipped) {
-        console.warn('purchase-proxy: order-placed SMS failed', smsResult)
+        console.warn('purchase-proxy: order-placed SMS failed', {
+          recipient: smsResult.recipient || 'unknown',
+          status: smsResult.status,
+          error: smsResult.error
+        })
       }
     }
 

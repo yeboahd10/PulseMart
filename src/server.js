@@ -115,7 +115,7 @@ app.post("/api/purchase", async (req, res) => {
   }
 
   try {
-    const apiKey = process.env.HUBNET_API_KEY || process.env.VITE_API_KEY || process.env.API_KEY || '';
+    const apiKey = process.env.HUBNET_API_KEY || process.env.VITE_API_KEY_HUB || process.env.VITE_API_KEY || process.env.API_KEY || '';
     const _mask = (k) => {
       if (!k) return 'MISSING';
       try { if (k.length <= 8) return '*'.repeat(k.length); return `${k.slice(0,4)}...${k.slice(-4)}` } catch (e) { return 'ERROR' }
@@ -125,41 +125,40 @@ app.post("/api/purchase", async (req, res) => {
     const normalizeNetwork = (value) => {
       const s = String(value || '').toLowerCase()
       if (s.includes('mtn') || s.includes('yello')) return 'mtn'
-      if (s.includes('telecel') || s.includes('vodafone')) return 'telecel'
-      if (s.includes('airtel') || s.includes('tigo') || s === 'at' || s.includes('at_premium')) return 'airteltigo'
+      if (s.includes('telecel') || s.includes('vodafone') || s.includes('big-time')) return 'big-time'
+      if (s.includes('airtel') || s.includes('tigo') || s === 'at' || s.includes('at_premium')) return 'at'
       return s
     }
 
-    const requestId = `req_${Date.now()}`
+    const requestId = `HB${Date.now().toString(36)}`
     const response = await axios.post(
-      `${String(process.env.HUBNET_BASE_URL || 'https://hubnetgh.site/wp-json/hubnet-api/v1').replace(/\/$/, '')}/place_order`,
+      `${String(process.env.HUBNET_BASE_URL || process.env.VITE_HUBNET_BASE_URL || 'https://console.hubnet.app/live/api/context/business/transaction').replace(/\/$/, '')}/${normalizeNetwork(network)}-new-transaction`,
       {
-        customer_number: String(phoneNumber),
-        network: normalizeNetwork(network),
+        phone: String(phoneNumber).replace(/\D/g, '').slice(-10),
         volume: String(capacity).replace(/[^0-9]/g, ''),
-        quantity: 1,
-        request_id: requestId
+        reference: requestId
       },
       {
         headers: {
-          "X-API-Key": apiKey
+          token: `Bearer ${apiKey}`,
+          Accept: 'application/json'
         }
       }
     );
 
     const payload = response.data || {}
-    const success = payload.success === true || String(payload.status || '').toLowerCase() === 'success'
-    const orderReference = String(payload.order_id || requestId)
+    const success = payload.status === true || String(payload.message || '').trim() === '0000' || String(payload.reason || '').toLowerCase() === 'successful'
+    const orderReference = String(payload.reference || requestId)
 
     res.status(201).json({
       success,
       status: success ? 'success' : 'failed',
       message: payload.message || (success ? 'Order placed successfully' : 'Order placement failed'),
       orderReference,
-      transactionReference: orderReference,
+      transactionReference: payload.transaction_id || payload.payment_id || orderReference,
       data: {
         status: success ? 'success' : 'failed',
-        orderStatus: success ? 'pending' : 'failed',
+        orderStatus: success ? 'processing' : 'failed',
         orderReference,
         raw: payload
       }

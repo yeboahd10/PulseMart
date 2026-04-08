@@ -120,14 +120,54 @@ const PaystackCallback = () => {
               t.set(markerRef, { reference: tx.reference || reference, userId: userRef.id, amount: creditAmount, rawAmount: amountGhs, metadata: tx.metadata || null, processedAt: serverTimestamp() })
             })
 
-            // refresh auth context after credit
-            const updatedSnap = await getDoc(userRef)
-            const userDoc = updatedSnap.exists() ? updatedSnap.data() : {}
-            const combined = fbUser && fbUser.uid ? { uid: fbUser.uid, email: fbUser.email, displayName: fbUser.displayName, ...userDoc } : userDoc
+            // get updated balance for SMS
+            let sentDepositSms = false
+            let newBalanceForSms = creditAmount
             try {
-              if (typeof login === 'function') await login(combined)
+              const updatedSnap = await getDoc(userRef)
+              const userDoc = updatedSnap.exists() ? updatedSnap.data() : {}
+              newBalanceForSms = Number(userDoc.balance ?? userDoc.wallet ?? creditAmount)
+              
+              // refresh auth context after credit
+              const combined = fbUser && fbUser.uid ? { uid: fbUser.uid, email: fbUser.email, displayName: fbUser.displayName, ...userDoc } : userDoc
+              try {
+                if (typeof login === 'function') await login(combined)
+              } catch (e) {
+                console.warn('Failed to update auth context after payment', e)
+              }
+
+              // send deposit SMS notification
+              try {
+                const userName = combined?.fullName || combined?.displayName || combined?.name || 'User'
+                const userPhone = combined?.phoneNumber || combined?.phone || combined?.accountPhone || tx?.customer?.phone || null
+                
+                if (userPhone) {
+                  const depositPayload = {
+                    to: userPhone,
+                    userName,
+                    amount: creditAmount,
+                    newBalance: newBalanceForSms
+                  }
+                  
+                  const smsStaff = await fetch('/.netlify/functions/deposit-notify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(depositPayload)
+                  })
+                  
+                  if (smsStaff.ok) {
+                    const smsResp = await smsStaff.json()
+                    console.log('Deposit SMS sent successfully', smsResp)
+                    sentDepositSms = true
+                  } else {
+                    console.warn('Failed to send deposit SMS', await smsStaff.text())
+                  }
+                }
+              } catch (smsErr) {
+                console.warn('Deposit SMS notification error (non-blocking)', smsErr)
+              }
             } catch (e) {
-              console.warn('Failed to update auth context after payment', e)
+              console.error('Failed to get updated user doc or send SMS', e)
             }
 
             // attempt automatic purchase if Paystack transaction included purchase metadata
@@ -152,7 +192,9 @@ const PaystackCallback = () => {
                 }
 
                 const headers = { 'Content-Type': 'application/json' }
-                if (import.meta.env.VITE_API_KEY) headers['X-API-Key'] = import.meta.env.VITE_API_KEY
+                if (import.meta.env.VITE_API_KEY_HUB || import.meta.env.VITE_API_KEY) {
+                  headers['X-API-Key'] = import.meta.env.VITE_API_KEY_HUB || import.meta.env.VITE_API_KEY
+                }
 
                 let purchaseResp = null
                 try {
