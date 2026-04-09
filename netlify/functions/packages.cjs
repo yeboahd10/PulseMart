@@ -25,13 +25,23 @@ const hubnetNetworkMap = {
 }
 
 const fallbackPriceMap = {
-  MTN: [4.7, 9.4, 13.9, 18.7, 23.9, 27.9, 35.7, 44.5, 62.5, 83, 105, 129, 166, 207, 407],
+  MTN: {
+    '1': 4.7,
+    '2': 9.4,
+    '3': 13.9,
+    '4': 18.7,
+    '5': 23.9,
+    '6': 27.9,
+    '8': 35.7,
+    '10': 44.5,
+    '15': 62.5
+  },
   AT: [4.35, 8.95, 13.85, 17.7, 21, 24.7, 33.7, 41.7, 47.7, 57.7, 95.2, 115.2, 151.2, 190.2],
   TELECEL: [25, 40, 48, 55, 68, 85, 100, 120, 137, 157, 174, 195, 360]
 }
 
 const volumeMap = {
-  MTN: Array.from({ length: 15 }, (_, i) => String(i + 1)),
+  MTN: ['1', '2', '3', '4', '5', '6', '8', '10', '15'],
   AT: Array.from({ length: 14 }, (_, i) => String(i + 1)),
   TELECEL: Array.from({ length: 13 }, (_, i) => String(i + 1))
 }
@@ -60,7 +70,10 @@ exports.handler = async (event) => {
     const bundles = []
     for (let i = 0; i < volumes.length; i++) {
       const volume = volumes[i]
-      let resolvedPrice = Number(prices[i]) || 0
+      const fallbackPrice = typeof prices === 'object' && !Array.isArray(prices)
+        ? Number(prices[volume]) || 0
+        : Number(prices[i]) || 0
+      let resolvedPrice = fallbackPrice
       try {
         const previewResp = await axios.post(previewUrl, {
           network: hubnetNetwork,
