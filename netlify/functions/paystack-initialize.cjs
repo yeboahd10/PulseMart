@@ -1,4 +1,4 @@
-67const axios = require('axios');
+const axios = require('axios');
 
 const _sanitize = (s) => s ? String(s).trim().replace(/^Bearer\s+/i, '').replace(/^"|"$/g, '') : undefined;
 

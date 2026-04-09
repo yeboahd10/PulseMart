@@ -18,14 +18,15 @@ import { Link } from "react-router-dom";
 const apiKey = import.meta.env.VITE_API_KEY_HUB || import.meta.env.VITE_API_KEY;
 const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy';
 
-const localPrices = [4.7, 9.4, 13.9, 18.7, 23.9, 27.9,35.7,44.5,62.5,83,105,129,166,207,407];
+const mtnCapacities = ['1GB', '2GB', '3GB', '4GB', '5GB', '6GB', '8GB', '10GB', '15GB']
+const localPrices = [4.7, 9.4, 13.9, 18.7, 23.9, 27.9, 35.7, 44.5, 62.5]
 const MTN = () => {
   const { user } = useAuth()
   const [modalOpen, setModalOpen] = useState(false);
   const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [phone, setPhone] = useState("");
-  const { bundles, loading } = usePackages('MTN', localPrices)
+  const { bundles, loading } = usePackages('MTN', localPrices, mtnCapacities)
   const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [successInfo, setSuccessInfo] = useState(null);
   const [placing, setPlacing] = useState(false);
@@ -41,7 +42,7 @@ const MTN = () => {
         setOutOfStock(Boolean(data.outOfStock_MTN))
       }, (err) => console.warn('site meta snapshot error', err))
       return () => unsub()
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, [])
