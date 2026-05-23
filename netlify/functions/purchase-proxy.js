@@ -1,6 +1,17 @@
 const axios = require('axios')
 const crypto = require('crypto')
+const admin = require('firebase-admin')
 const { sendArkeselSms } = require('./_shared/arkesel-sms.cjs')
+
+// Initialize Firebase Admin SDK
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: process.env.FIREBASE_PROJECT_ID || 'puls-2024',
+    databaseURL: process.env.FIREBASE_DB_URL || 'https://puls-2024.firebaseio.com'
+  })
+}
+const db = admin.firestore()
+
 // In-memory map to avoid duplicate processing within the same function instance
 // Keys are idempotency keys (prefer Paystack reference when available, otherwise payload hash)
 const processedRefs = new Map()
@@ -117,6 +128,129 @@ const sendOrderPlacedSms = async (body, normalizedCapacity) => {
   return sendArkeselSms({ to: recipient, message })
 }
 
+// Verify Firebase ID token and extract user info
+const verifyAuthToken = async (authHeader) => {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { error: 'Missing or invalid Authorization header' }
+  }
+
+  const token = authHeader.substring(7)
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token)
+    return { uid: decodedToken.uid, email: decodedToken.email }
+  } catch (err) {
+    return { error: `Token verification failed: ${err.message}` }
+  }
+}
+
+// Query and verify user balance server-side
+const getAndVerifyBalance = async (uid, requiredAmount) => {
+  try {
+    const userDoc = await db.collection('users').doc(uid).get()
+    if (!userDoc.exists()) {
+      return { error: 'User document not found', balance: 0 }
+    }
+
+    const data = userDoc.data() || {}
+    const balance = Number(data.balance ?? data.wallet ?? 0)
+
+    // Verify balance is sufficient
+    if (balance < requiredAmount) {
+      return {
+        error: 'Insufficient balance',
+        balance: balance,
+        required: requiredAmount,
+        shortfall: requiredAmount - balance
+      }
+    }
+
+    return { balance, sufficient: true }
+  } catch (err) {
+    return { error: `Balance check failed: ${err.message}` }
+  }
+}
+
+// Atomically deduct balance from user account
+const deductBalanceAtomic = async (uid, amount, purchaseRef) => {
+  try {
+    const userRef = db.collection('users').doc(uid)
+
+    return await db.runTransaction(async (transaction) => {
+      const userSnap = await transaction.get(userRef)
+      if (!userSnap.exists()) {
+        throw new Error('User not found during balance deduction')
+      }
+
+      const currentBalance = Number(userSnap.data().balance ?? 0)
+      if (currentBalance < amount) {
+        throw new Error(`Insufficient balance at deduction time: ${currentBalance} < ${amount}`)
+      }
+
+      const newBalance = currentBalance - amount
+
+      // Update balance
+      transaction.update(userRef, {
+        balance: newBalance,
+        lastPurchaseAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastPurchaseRef: purchaseRef
+      })
+
+      // Log transaction for audit trail
+      transaction.set(db.collection('balance_transactions').doc(), {
+        userId: uid,
+        type: 'deduction',
+        amount: amount,
+        newBalance: newBalance,
+        purchaseRef: purchaseRef,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      })
+
+      return { success: true, newBalance }
+    })
+  } catch (err) {
+    throw new Error(`Balance deduction failed: ${err.message}`)
+  }
+}
+
+// Log purchase attempt for audit trail
+const logPurchaseAttempt = async (details) => {
+  try {
+    await db.collection('purchase_log').add({
+      ...details,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    })
+  } catch (err) {
+    console.error('Failed to log purchase attempt:', err.message)
+  }
+}
+
+// Track recent purchases to prevent duplicates
+const recentPurchases = new Map()
+const DEDUP_TTL = 30 * 1000 // 30 seconds
+
+const isDuplicatePurchase = (phone, network, capacity, userId) => {
+  const key = `${userId}:${phone}:${network}:${capacity}`
+  const now = Date.now()
+  
+  if (recentPurchases.has(key)) {
+    const lastPurchase = recentPurchases.get(key)
+    if (now - lastPurchase < DEDUP_TTL) {
+      return true // Duplicate within 30 seconds
+    }
+  }
+  
+  recentPurchases.set(key, now)
+  
+  // Clean old entries
+  for (const [k, v] of recentPurchases.entries()) {
+    if (now - v > DEDUP_TTL * 2) {
+      recentPurchases.delete(k)
+    }
+  }
+  
+  return false
+}
+
 exports.handler = async (event) => {
   try {
     // Handle preflight
@@ -167,6 +301,75 @@ exports.handler = async (event) => {
     if (!secretApiKey) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Hubnet API key not configured' }) }
 
     const paystackRef = String(body.paystackReference || body.reference || body.transactionReference || body.tx_ref || body.paymentReference || '').trim() || null
+    const gateway = body.gateway || (paystackRef ? 'paystack' : 'wallet')
+
+    // For WALLET purchases (no Paystack), require authentication
+    if (gateway === 'wallet' || !paystackRef) {
+      const authHeader = event.headers?.authorization || event.headers?.Authorization
+
+      // Verify Firebase token
+      const authResult = await verifyAuthToken(authHeader)
+      if (authResult.error) {
+        return {
+          statusCode: 401,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({ message: authResult.error })
+        }
+      }
+
+      const uid = authResult.uid
+
+      // Verify user ID in request matches authenticated user
+      if (body.userId && body.userId !== uid) {
+        return {
+          statusCode: 403,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({ message: 'User ID mismatch' })
+        }
+      }
+
+      // Check for duplicate purchase
+      if (isDuplicatePurchase(phoneNumber, network, capacity, uid)) {
+        return {
+          statusCode: 409,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({ message: 'Duplicate purchase attempt detected within 30 seconds' })
+        }
+      }
+
+      // Query current balance server-side
+      const displayPrice = Number(body.displayPrice || body.amount || 0)
+      const balanceResult = await getAndVerifyBalance(uid, displayPrice)
+
+      if (balanceResult.error) {
+        await logPurchaseAttempt({
+          userId: uid,
+          phoneNumber: phoneNumber,
+          network: network,
+          capacity: capacity,
+          gateway: gateway,
+          displayPrice: displayPrice,
+          status: 'balance_check_failed',
+          error: balanceResult.error,
+          balance: balanceResult.balance,
+          required: balanceResult.required
+        })
+
+        return {
+          statusCode: 400,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({
+            message: balanceResult.error,
+            balance: balanceResult.balance,
+            required: balanceResult.required
+          })
+        }
+      }
+
+      // Set authenticated user ID for later use
+      body.authenticatedUserId = uid
+    }
+
     const requestId = buildHubnetReference(body.request_id || body.requestId || paystackRef)
     const purchaseUrl = `${resolveHubnetBaseUrl().replace(/\/$/, '')}/${network}-new-transaction`
     if (!purchaseUrl) return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ message: 'Purchase API URL not configured' }) }
@@ -300,6 +503,53 @@ exports.handler = async (event) => {
           status: smsResult.status,
           error: smsResult.error
         })
+      }
+
+      // For wallet purchases, deduct balance atomically
+      if (gateway === 'wallet' && body.authenticatedUserId) {
+        try {
+          const displayPrice = Number(body.displayPrice || body.amount || 0)
+          const deductResult = await deductBalanceAtomic(
+            body.authenticatedUserId,
+            displayPrice,
+            normalized.orderReference || normalized.order_id
+          )
+          normalized.balanceDeducted = deductResult
+          console.log('Balance deducted successfully:', { userId: body.authenticatedUserId, amount: displayPrice, newBalance: deductResult.newBalance })
+
+          // Log successful purchase
+          await logPurchaseAttempt({
+            userId: body.authenticatedUserId,
+            phoneNumber: phoneNumber,
+            network: network,
+            capacity: capacity,
+            gateway: gateway,
+            displayPrice: displayPrice,
+            status: 'success',
+            orderReference: normalized.orderReference,
+            newBalance: deductResult.newBalance,
+            balanceDeducted: true
+          })
+        } catch (deductErr) {
+          console.error('Balance deduction failed after purchase success:', deductErr.message)
+          normalized.error = 'Order placed but balance deduction failed'
+          normalized.requiresManualAudit = true
+          normalized.balanceDeductionError = deductErr.message
+
+          // Log the critical error
+          await logPurchaseAttempt({
+            userId: body.authenticatedUserId,
+            phoneNumber: phoneNumber,
+            network: network,
+            capacity: capacity,
+            gateway: gateway,
+            displayPrice: Number(body.displayPrice || body.amount || 0),
+            status: 'balance_deduction_failed',
+            orderReference: normalized.orderReference,
+            error: deductErr.message,
+            requiresManualAudit: true
+          })
+        }
       }
     }
 

@@ -117,8 +117,18 @@ const PaystackCallback = () => {
               const snap2 = await t.get(userRef)
               const current = Number(snap2.exists() ? (snap2.data().balance ?? snap2.data().wallet ?? 0) : 0)
               calculatedNewBalance = Number((current + creditAmount).toFixed(2))
-              t.update(userRef, { balance: calculatedNewBalance })
+              t.update(userRef, { balance: calculatedNewBalance, lastTopUpAt: serverTimestamp() })
               t.set(markerRef, { reference: tx.reference || reference, userId: userRef.id, amount: creditAmount, rawAmount: amountGhs, metadata: tx.metadata || null, processedAt: serverTimestamp() })
+              
+              // Log transaction for audit trail
+              t.set(collection(db, 'balance_transactions').doc(), {
+                userId: userRef.id,
+                type: 'credit',
+                amount: creditAmount,
+                newBalance: calculatedNewBalance,
+                paystackRef: reference,
+                timestamp: serverTimestamp()
+              })
             })
 
             const meta = tx.metadata || {}
