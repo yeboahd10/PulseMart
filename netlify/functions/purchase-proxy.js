@@ -5,9 +5,15 @@ const { sendArkeselSms } = require('./_shared/arkesel-sms.cjs')
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
+  const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID
+  if (!firebaseProjectId) {
+    throw new Error('Firebase project ID is required. Set FIREBASE_PROJECT_ID or VITE_FIREBASE_PROJECT_ID.')
+  }
+
+  const databaseURL = process.env.FIREBASE_DB_URL || `https://${firebaseProjectId}.firebaseio.com`
   admin.initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || 'puls-2024',
-    databaseURL: process.env.FIREBASE_DB_URL || 'https://puls-2024.firebaseio.com'
+    projectId: firebaseProjectId,
+    databaseURL
   })
 }
 const db = admin.firestore()

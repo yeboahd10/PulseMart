@@ -26,7 +26,7 @@ const buildServiceAccount = () => {
     }
   }
 
-  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || process.env.VITE_FIREBASE_PROJECT_ID || ''
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || ''
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || ''
   const privateKey = String(process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n')
 
@@ -52,7 +52,7 @@ const getAdminApp = () => {
     return initializeApp({ credential: applicationDefault() })
   }
 
-  throw new Error('Firebase admin credentials not configured. Set FIREBASE_SERVICE_ACCOUNT or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY.')
+  throw new Error('Firebase admin credentials not configured. Set FIREBASE_SERVICE_ACCOUNT, FIREBASE_PROJECT_ID/VITE_FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.')
 }
 
 const getDb = () => getFirestore(getAdminApp())
