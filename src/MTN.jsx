@@ -10,7 +10,6 @@ import axios from "axios";
 import { addDoc, collection, serverTimestamp, runTransaction, doc as docRef } from 'firebase/firestore'
 import { db } from './firebase'
 import { useAuth } from './context/AuthContext'
-import { getAuth } from 'firebase/auth'
 import { TiTick } from "react-icons/ti";
 import { FaCediSign, FaPhone, FaRegCopyright } from "react-icons/fa6";
 import { mapNetwork, toHubnetVolume } from './utils/network'
@@ -46,13 +45,6 @@ const MTN = () => {
       // ignore
     }
   }, [])
-
-  const getAuthToken = async () => {
-    const auth = getAuth();
-    const fbUser = auth.currentUser;
-    if (!fbUser) throw new Error('Not authenticated');
-    return await fbUser.getIdToken();
-  }
 
   const handleBuy = async () => {
     const b = bundles[selectedIndex];
@@ -150,16 +142,6 @@ const MTN = () => {
 
     const headers = { 'Content-Type': 'application/json' }
     if (apiKey) headers['X-API-Key'] = apiKey
-
-    // Add Firebase auth token for wallet purchases
-    try {
-      const authToken = await getAuthToken();
-      headers['Authorization'] = `Bearer ${authToken}`;
-    } catch (err) {
-      alert('Authentication failed. Please log in again.');
-      setPlacing(false);
-      return;
-    }
 
     axios.post(purchaseUrl, payload, { headers })
       .then(async (res) => {
