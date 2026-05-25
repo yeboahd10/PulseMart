@@ -19,7 +19,7 @@ const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functi
 const localPricesAT = [4.35, 8.95, 13.85, 17.7, 21.0, 24.7, 33.7, 41.7, 47.7, 57.7, 95.2, 115.2, 151.2, 190.2]
 
 const AT = () => {
-  const { user } = useAuth()
+  const { user, initializing } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
   const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -64,9 +64,16 @@ const AT = () => {
     }
 
     const displayPrice = Number(b.price) || 0
-    const userBalance = Number(user?.balance ?? user?.wallet ?? 0)
+    const rawBalance = user?.balance ?? user?.wallet ?? 0
+    const userBalance = Number.isFinite(Number(rawBalance)) ? Number(rawBalance) : 0
     const accountName = String(user?.fullName || user?.name || user?.displayName || 'Customer').trim() || 'Customer'
     const accountPhone = String(user?.phoneNumber || user?.phone || '').trim()
+
+    if (initializing || !user) {
+      alert('Please wait while your account loads before purchasing.')
+      setPlacing(false)
+      return
+    }
 
     if (user && userBalance < displayPrice) {
       const shortfall = Number((displayPrice - userBalance).toFixed(2))

@@ -75,13 +75,13 @@ const sanitizePhone = (value) => String(value || '').replace(/\D/g, '').slice(-1
 const normalizePurchaseResponse = (upstreamData, fallbackRequestId) => {
   const raw = upstreamData || {}
   const nested = raw?.data || raw?.result || {}
+  const statusString = String(raw?.status || nested?.status || nested?.orderStatus || raw?.orderStatus || '').toLowerCase()
   const success =
     raw?.status === true ||
     nested?.status === true ||
-    String(raw?.status || '').toLowerCase() === 'success' ||
-    String(nested?.status || '').toLowerCase() === 'success' ||
     raw?.success === true ||
     nested?.success === true ||
+    ['success', 'processing', 'pending', 'completed', 'paid'].includes(statusString) ||
     String(raw?.message || '').trim() === '0000' ||
     String(nested?.message || '').trim() === '0000' ||
     String(raw?.reason || '').toLowerCase() === 'successful' ||

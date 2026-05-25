@@ -38,10 +38,12 @@ const normalizeNetwork = (net) => {
 
 const normalizePurchaseResponse = (upstreamData, fallbackRequestId) => {
   const raw = upstreamData || {}
-  const success = raw?.success === true || String(raw?.status || '').toLowerCase() === 'success'
+  const statusValue = String(raw?.status || raw?.order_status || raw?.status_label || '').toLowerCase()
+  const success = raw?.success === true || ['success', 'processing', 'pending', 'completed', 'paid'].includes(statusValue)
   const orderId = raw?.order_id || raw?.orderId || raw?.id || null
   const orderReference = String(orderId || fallbackRequestId || '').trim() || null
   const total = Number(raw?.total || raw?.amount || 0) || null
+  const orderStatus = success ? (statusValue || 'processing') : 'failed'
 
   return {
     success,
@@ -53,7 +55,7 @@ const normalizePurchaseResponse = (upstreamData, fallbackRequestId) => {
     total,
     data: {
       status: success ? 'success' : 'failed',
-      orderStatus: success ? 'pending' : 'failed',
+      orderStatus,
       orderReference,
       transactionReference: orderReference,
       total,

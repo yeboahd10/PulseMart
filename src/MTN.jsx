@@ -20,7 +20,7 @@ const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functi
 
 const localPrices = [4.7, 9.4, 13.9, 18.7, 23.9, 27.9, 35.7, 44.5, 62.5];
 const MTN = () => {
-  const { user } = useAuth()
+  const { user, initializing } = useAuth()
   const [modalOpen, setModalOpen] = useState(false);
   const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -62,9 +62,16 @@ const MTN = () => {
     }
 
     const displayPrice = Number(b.price) || 0
-    const userBalance = Number(user?.balance ?? user?.wallet ?? 0)
+    const rawBalance = user?.balance ?? user?.wallet ?? 0
+    const userBalance = Number.isFinite(Number(rawBalance)) ? Number(rawBalance) : 0
     const accountName = String(user?.fullName || user?.name || user?.displayName || 'Customer').trim() || 'Customer'
     const accountPhone = String(user?.phoneNumber || user?.phone || '').trim()
+
+    if (initializing || !user) {
+      alert('Please wait while your account loads before purchasing.')
+      setPlacing(false)
+      return
+    }
 
     // if user's balance is less than local display price, trigger Paystack
     if (user && userBalance < displayPrice) {

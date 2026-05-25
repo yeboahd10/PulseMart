@@ -22,7 +22,7 @@ const purchaseUrl = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functi
 const localPricesTelecel = [25, 40, 48, 55, 68,85,100,120,137,157,174,195,360]
 
 const Telecel = () => {
-  const { user } = useAuth()
+  const { user, initializing } = useAuth()
   const [modalOpen, setModalOpen] = useState(false)
   const [outOfStock, setOutOfStock] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -50,10 +50,18 @@ const Telecel = () => {
     }
 
     const displayPrice = Number(b.price) || 0
-    const userBalance = Number(user?.balance ?? user?.wallet ?? 0)
+    const rawBalance = user?.balance ?? user?.wallet ?? 0
+    const userBalance = Number.isFinite(Number(rawBalance)) ? Number(rawBalance) : 0
     const accountName = String(user?.fullName || user?.name || user?.displayName || 'Customer').trim() || 'Customer'
     const accountPhone = String(user?.phoneNumber || user?.phone || '').trim()
-    if (user && userBalance < displayPrice) {
+
+    if (initializing || !user) {
+      alert('Please wait while your account loads before purchasing.')
+      setPlacing(false)
+      return
+    }
+
+    if (userBalance < displayPrice) {
       const shortfall = Number((displayPrice - userBalance).toFixed(2))
       const fee = Number((shortfall * 0.02).toFixed(2))
       const total = Number((shortfall + fee).toFixed(2))

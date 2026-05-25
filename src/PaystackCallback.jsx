@@ -132,7 +132,14 @@ const PaystackCallback = () => {
             })
 
             const meta = tx.metadata || {}
-            const purchaseMeta = meta.purchase || null
+            let purchaseMeta = meta.purchase || null
+            if (purchaseMeta && typeof purchaseMeta === 'string') {
+              try {
+                purchaseMeta = JSON.parse(purchaseMeta)
+              } catch (e) {
+                console.warn('Failed to parse purchase metadata string', e)
+              }
+            }
 
             // get updated balance for SMS - use calculated value first, then verify from Firestore
             let sentDepositSms = false
@@ -200,9 +207,7 @@ const PaystackCallback = () => {
             // attempt automatic purchase if Paystack transaction included purchase metadata
             try {
               if (purchaseMeta) {
-                const purchaseEndpoint = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('localhost'))
-                  ? '/.netlify/functions/purchase-proxy'
-                  : (import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy')
+                const purchaseEndpoint = import.meta.env.VITE_API_PURCHASE_PROXY || '/.netlify/functions/purchase-proxy'
 
                 const payload = {
                   phoneNumber: purchaseMeta.phoneNumber || purchaseMeta.phone || '',
@@ -223,6 +228,7 @@ const PaystackCallback = () => {
 
                 let purchaseResp = null
                 try {
+                  console.log('PaystackCallback: auto purchase payload', { purchaseEndpoint, payload })
                   purchaseResp = await axios.post(purchaseEndpoint, payload, { headers })
                   console.log('Automatic purchase response', purchaseResp?.data)
                 } catch (pErr) {
@@ -239,7 +245,8 @@ const PaystackCallback = () => {
                 // If purchase succeeded, save purchase record in Firestore and deduct the full bundle price
                 try {
                   const resp = purchaseResp?.data || {}
-                  const success = resp?.status === 'success' || resp?.success === true || resp?.order_status === 'success' || resp?.data?.status === 'success'
+                  const normalizedStatus = String(resp?.status || resp?.order_status || resp?.data?.orderStatus || resp?.data?.status || '').toLowerCase()
+                  const success = resp?.success === true || ['success', 'processing', 'pending', 'completed', 'paid'].includes(normalizedStatus)
                   if (success) {
                     const orderReference = resp?.orderReference || resp?.order_reference || resp?.order_id || resp?.data?.orderReference || resp?.data?.order_reference || resp?.data?.order_id || null
                     const transactionReference = resp?.transactionReference || resp?.transaction_ref || resp?.tx_ref || resp?.reference || resp?.data?.transactionReference || resp?.data?.reference || null
