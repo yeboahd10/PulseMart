@@ -121,22 +121,8 @@ const PaystackCallback = () => {
               t.set(markerRef, { reference: tx.reference || reference, userId: userRef.id, amount: creditAmount, rawAmount: amountGhs, metadata: tx.metadata || null, processedAt: serverTimestamp() })
               
               // Log transaction for audit trail
-              t.set(collection(db, 'balance_transactions').doc(), {
-                userId: userRef.id,
-                type: 'credit',
-                amount: creditAmount,
-                newBalance: calculatedNewBalance,
-                paystackRef: reference,
-                timestamp: serverTimestamp()
-              })
-            })
-
-            const meta = tx.metadata || {}
-            let purchaseMeta = meta.purchase || null
-            if (purchaseMeta && typeof purchaseMeta === 'string') {
-              try {
-                purchaseMeta = JSON.parse(purchaseMeta)
-              } catch (e) {
+                const balanceTxRef = doc(collection(db, 'balance_transactions'))
+                t.set(balanceTxRef, {
                 console.warn('Failed to parse purchase metadata string', e)
               }
             }
