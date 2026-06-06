@@ -209,7 +209,9 @@ const PaystackCallback = () => {
                   accountPhone: purchaseMeta.accountPhone || user?.phoneNumber || user?.phone || purchaseMeta.phoneNumber || purchaseMeta.phone || '',
                   userId: userRef.id || (fbUser && fbUser.uid) || null,
                   userName: purchaseMeta.accountName || user?.fullName || user?.name || user?.displayName || 'Customer',
-                  gateway: 'wallet'
+                  gateway: 'wallet',
+                  displayPrice: Number(purchaseMeta.displayPrice) || 0,
+                  amount: Number(purchaseMeta.displayPrice) || 0
                 }
 
                 const headers = { 'Content-Type': 'application/json' }
@@ -218,17 +220,29 @@ const PaystackCallback = () => {
                 }
 
                 let purchaseResp = null
+                let purchaseError = null
                 try {
                   console.log('PaystackCallback: auto purchase payload', { purchaseEndpoint, payload })
                   purchaseResp = await axios.post(purchaseEndpoint, payload, { headers })
                   console.log('Automatic purchase response', purchaseResp?.data)
                 } catch (pErr) {
-                  console.error('Automatic purchase failed', pErr)
+                  purchaseError = pErr
+                  console.error('Automatic purchase API call failed', pErr.message, pErr.response?.data)
+                  // If error response has data, use it; otherwise null
+                  if (pErr.response?.data) {
+                    purchaseResp = { data: pErr.response.data, status: pErr.response.status }
+                  }
                 }
 
                 // record purchase attempt/result on the marker doc so we don't run it again
                 try {
-                  await setDoc(markerRef, { purchaseExecuted: true, purchaseResponse: purchaseResp?.data || null, purchaseAttemptedAt: serverTimestamp() }, { merge: true })
+                  const markerUpdate = {
+                    purchaseExecuted: true,
+                    purchaseAttemptedAt: serverTimestamp()
+                  }
+                  if (purchaseResp?.data) markerUpdate.purchaseResponse = purchaseResp.data
+                  if (purchaseError) markerUpdate.purchaseError = String(purchaseError.message)
+                  await setDoc(markerRef, markerUpdate, { merge: true })
                 } catch (uErr) {
                   console.error('Failed to update paystack marker with purchase result', uErr)
                 }
@@ -238,7 +252,10 @@ const PaystackCallback = () => {
                   const resp = purchaseResp?.data || {}
                   const normalizedStatus = String(resp?.status || resp?.order_status || resp?.data?.orderStatus || resp?.data?.status || '').toLowerCase()
                   const success = resp?.success === true || ['success', 'processing', 'pending', 'completed', 'paid'].includes(normalizedStatus)
-                  if (success) {
+                  
+                  if (!success && purchaseError) {
+                    console.warn('Auto-purchase skipped due to API error', { purchaseError: purchaseError.message, resp })
+                  } else if (success) {
                     const orderReference = resp?.orderReference || resp?.order_reference || resp?.order_id || resp?.data?.orderReference || resp?.data?.order_reference || resp?.data?.order_id || null
                     const transactionReference = resp?.transactionReference || resp?.transaction_ref || resp?.tx_ref || resp?.reference || resp?.data?.transactionReference || resp?.data?.reference || null
 
