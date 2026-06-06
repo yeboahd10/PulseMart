@@ -121,11 +121,16 @@ const PaystackCallback = () => {
               t.set(markerRef, { reference: tx.reference || reference, userId: userRef.id, amount: creditAmount, rawAmount: amountGhs, metadata: tx.metadata || null, processedAt: serverTimestamp() })
               
               // Log transaction for audit trail
-                const balanceTxRef = doc(collection(db, 'balance_transactions'))
-                t.set(balanceTxRef, {
-                console.warn('Failed to parse purchase metadata string', e)
-              }
-            }
+              const balanceTxRef = doc(collection(db, 'balance_transactions'))
+              t.set(balanceTxRef, {
+                userId: userRef.id,
+                type: 'credit',
+                amount: creditAmount,
+                newBalance: calculatedNewBalance,
+                paystackRef: reference,
+                timestamp: serverTimestamp()
+              })
+            })
 
             // get updated balance for SMS - use calculated value first, then verify from Firestore
             let sentDepositSms = false
